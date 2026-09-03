@@ -7,6 +7,9 @@ import SubmitGrievance from '../pages/SubmitGrievance';
 import TrackGrievance from '../pages/TrackGrievance';
 import Login from '../pages/Login';
 import AcceptInvitation from '../pages/AcceptInvitation';
+import ForgotPassword from '../pages/ForgotPassword';
+import ResetPassword from '../pages/ResetPassword';
+import ChangePassword from '../pages/ChangePassword';
 import DashboardOverview from '../pages/DashboardOverview';
 import GrievancesList from '../pages/GrievancesList';
 import GrievanceDetail from '../pages/GrievanceDetail';
@@ -28,6 +31,14 @@ export const router = createBrowserRouter([
     element: <Login />,
   },
   {
+    path: '/forgot-password',
+    element: <ForgotPassword />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPassword />,
+  },
+  {
     path: '/accept-invitation',
     element: <AcceptInvitation />,
   },
@@ -42,6 +53,7 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardOverview /> },
       { path: 'grievances', element: <GrievancesList /> },
       { path: 'grievances/:id', element: <GrievanceDetail /> },
+      { path: 'change-password', element: <ChangePassword /> },
       {
         path: 'analytics',
         element: (

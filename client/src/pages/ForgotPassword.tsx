@@ -1,37 +1,63 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { useAuth } from '../contexts/auth-context';
+import { forgotPassword } from '../services/auth.service';
 import { getErrorMessage } from '../lib/api';
 
-export default function Login() {
+export default function ForgotPassword() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login, isLoading } = useAuth();
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
-      await login(email, password);
-      navigate('/dashboard');
+      await forgotPassword(email);
+      setSubmitted(true);
     } catch (err) {
       setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
     }
   };
+
+  if (submitted) {
+    return (
+      <div className="max-w-md mx-auto mt-16">
+        <Card>
+          <CardHeader>
+            <CardTitle>Check Your Email</CardTitle>
+            <CardDescription>
+              If an account exists for that email, a password reset link has been sent.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link to="/login">
+              <Button variant="outline" className="w-full">
+                Back to Login
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto mt-16">
       <Card>
         <CardHeader>
-          <CardTitle>Staff Login</CardTitle>
-          <CardDescription>Sign in to manage grievances</CardDescription>
+          <CardTitle>Forgot Password</CardTitle>
+          <CardDescription>
+            Enter your email and we'll send you a link to reset your password.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -47,30 +73,19 @@ export default function Login() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-
             {error && (
               <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Sign In'}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Sending...' : 'Send Reset Link'}
             </Button>
 
             <div className="text-center text-sm">
-              <Link to="/forgot-password" className="text-primary hover:underline">
-                Forgot password?
+              <Link to="/login" className="text-primary hover:underline">
+                Back to Login
               </Link>
             </div>
           </form>

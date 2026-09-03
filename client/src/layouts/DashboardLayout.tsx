@@ -48,6 +48,12 @@ export default function DashboardLayout() {
             >
               Grievances
             </Link>
+            <Link
+              to="/dashboard/change-password"
+              className="block px-3 py-2 rounded-md text-sm font-medium hover:bg-accent"
+            >
+              Change Password
+            </Link>
             {user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' ? (
               <>
                 <Link
