@@ -20,6 +20,8 @@ import {
 import { listUsers } from '../services/admin.service';
 import { getErrorMessage } from '../lib/api';
 import { useAuth } from '../contexts/auth-context';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -77,7 +79,7 @@ export default function GrievanceDetail() {
   // Attachment state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error: queryError, refetch } = useQuery({
     queryKey: ['grievance', id],
     queryFn: () => getGrievance(id!),
     enabled: !!id,
@@ -150,11 +152,15 @@ export default function GrievanceDetail() {
   });
 
   if (isLoading) {
-    return <div className="text-center py-12">Loading grievance...</div>;
+    return <LoadingState label="Loading grievance..." />;
+  }
+
+  if (isError) {
+    return <ErrorState message={getErrorMessage(queryError)} onRetry={() => refetch()} />;
   }
 
   if (!data) {
-    return <div className="text-center py-12">Grievance not found.</div>;
+    return <ErrorState message="Grievance not found." />;
   }
 
   const { grievance, updates, assignments } = data;

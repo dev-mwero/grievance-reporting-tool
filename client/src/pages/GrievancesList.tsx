@@ -9,6 +9,9 @@ import { Button } from '../components/ui/button';
 import { listGrievances } from '../services/staff.service';
 import { listCategories, listSubCounties, listWards, listUsers } from '../services/admin.service';
 import { useAuth } from '../contexts/auth-context';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
+import { getErrorMessage } from '../lib/api';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -68,7 +71,7 @@ export default function GrievancesList() {
     queryFn: () => listUsers({ limit: 100, isActive: 'true' }),
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: [
       'grievances',
       page,
@@ -318,7 +321,9 @@ export default function GrievancesList() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-center py-8 text-muted-foreground">Loading...</p>
+            <LoadingState label="Loading grievances..." />
+          ) : isError ? (
+            <ErrorState message={getErrorMessage(error)} onRetry={() => refetch()} />
           ) : data?.data && data.data.length > 0 ? (
             <div className="space-y-3">
               {data.data.map((g) => (

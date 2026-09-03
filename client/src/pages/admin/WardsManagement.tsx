@@ -14,6 +14,7 @@ import {
   listSubCounties,
 } from '../../services/admin.service';
 import { getErrorMessage } from '../../lib/api';
+import LoadingState from '../../components/LoadingState';
 
 export default function WardsManagement() {
   const queryClient = useQueryClient();
@@ -241,7 +242,7 @@ export default function WardsManagement() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <p className="text-center py-8 text-muted-foreground">Loading...</p>
+            <LoadingState label="Loading..." />
           ) : data?.data && data.data.length > 0 ? (
             <div className="space-y-3">
               {data.data.map((ward) => (

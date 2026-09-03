@@ -4,6 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { getProfile } from '../services/auth.service';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
+import { getErrorMessage } from '../lib/api';
 
 const ROLE_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUPER_ADMIN: 'destructive',
@@ -23,17 +26,21 @@ function formatDate(date?: string): string {
 }
 
 export default function Profile() {
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['profile'],
     queryFn: getProfile,
   });
 
   if (isLoading) {
-    return <div className="text-center py-12">Loading profile...</div>;
+    return <LoadingState label="Loading profile..." />;
+  }
+
+  if (isError) {
+    return <ErrorState message={getErrorMessage(error)} onRetry={() => refetch()} />;
   }
 
   if (!profile) {
-    return <div className="text-center py-12">Profile not found.</div>;
+    return <ErrorState message="Profile not found." />;
   }
 
   return (

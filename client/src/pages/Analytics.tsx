@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
+import LoadingState from '../components/LoadingState';
 import {
   getAnalyticsOverview,
   getStatusDistribution,
@@ -188,7 +189,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               {statusQuery.isLoading ? (
-                <p className="text-center py-8 text-muted-foreground">Loading...</p>
+                <LoadingState label="Loading..." />
               ) : statusDist ? (
                 <div className="space-y-3">
                   {Object.entries(statusDist.distribution).map(([status, count]) => (
@@ -222,7 +223,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 {categoryQuery.isLoading ? (
-                  <p className="text-center py-8 text-muted-foreground">Loading...</p>
+                  <LoadingState label="Loading..." />
                 ) : categoryBreakdown && categoryBreakdown.breakdown.length > 0 ? (
                   <div className="space-y-3">
                     {categoryBreakdown.breakdown.map((item) => (
@@ -252,7 +253,7 @@ export default function Analytics() {
               </CardHeader>
               <CardContent>
                 {subCountyQuery.isLoading ? (
-                  <p className="text-center py-8 text-muted-foreground">Loading...</p>
+                  <LoadingState label="Loading..." />
                 ) : subCountyBreakdown && subCountyBreakdown.breakdown.length > 0 ? (
                   <div className="space-y-3">
                     {subCountyBreakdown.breakdown.map((item) => (
@@ -297,7 +298,7 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             {trendQuery.isLoading ? (
-              <p className="text-center py-8 text-muted-foreground">Loading...</p>
+              <LoadingState label="Loading..." />
             ) : trend && trend.trend.length > 0 ? (
               <div className="space-y-2">
                 {trend.trend.map((point) => (
@@ -377,7 +378,7 @@ export default function Analytics() {
             </div>
 
             {auditQuery.isLoading ? (
-              <p className="text-center py-8 text-muted-foreground">Loading...</p>
+              <LoadingState label="Loading..." />
             ) : audit && audit.data && audit.data.length > 0 ? (
               <div className="space-y-3">
                 {audit.data.map((log) => (

@@ -2,7 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 import { getDashboardStats } from '../services/staff.service';
+import { getErrorMessage } from '../lib/api';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -16,13 +19,17 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'war
 };
 
 export default function DashboardOverview() {
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: getDashboardStats,
   });
 
   if (isLoading) {
-    return <div className="text-center py-12">Loading dashboard...</div>;
+    return <LoadingState label="Loading dashboard..." />;
+  }
+
+  if (isError) {
+    return <ErrorState message={getErrorMessage(error)} onRetry={() => refetch()} />;
   }
 
   return (

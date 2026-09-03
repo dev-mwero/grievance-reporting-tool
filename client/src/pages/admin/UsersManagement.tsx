@@ -13,6 +13,7 @@ import {
   type CreateUserInput,
 } from '../../services/admin.service';
 import { getErrorMessage } from '../../lib/api';
+import LoadingState from '../../components/LoadingState';
 import type { Role } from 'shared';
 
 const ROLES: Role[] = ['SUPER_ADMIN', 'ADMIN', 'STAFF'] as Role[];
@@ -188,7 +189,7 @@ export default function UsersManagement() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <p className="text-center py-8 text-muted-foreground">Loading...</p>
+            <LoadingState label="Loading..." />
           ) : data?.data && data.data.length > 0 ? (
             <div className="space-y-3">
               {data.data.map((user) => (

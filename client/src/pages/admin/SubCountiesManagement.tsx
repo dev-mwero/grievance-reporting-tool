@@ -12,6 +12,7 @@ import {
   deactivateSubCounty,
 } from '../../services/admin.service';
 import { getErrorMessage } from '../../lib/api';
+import LoadingState from '../../components/LoadingState';
 
 export default function SubCountiesManagement() {
   const queryClient = useQueryClient();
@@ -164,7 +165,7 @@ export default function SubCountiesManagement() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <p className="text-center py-8 text-muted-foreground">Loading...</p>
+            <LoadingState label="Loading..." />
           ) : data?.data && data.data.length > 0 ? (
             <div className="space-y-3">
               {data.data.map((sc) => (
