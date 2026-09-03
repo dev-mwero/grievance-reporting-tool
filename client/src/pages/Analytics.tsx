@@ -119,7 +119,10 @@ export default function Analytics() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Analytics &amp; Reporting</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Analytics &amp; Reporting</h1>
+          <p className="text-sm text-muted-foreground mt-1">Insights into grievance trends and performance</p>
+        </div>
       </div>
 
       {/* Date range filter */}

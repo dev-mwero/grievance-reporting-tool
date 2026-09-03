@@ -6,6 +6,7 @@ import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import { getDashboardStats } from '../services/staff.service';
 import { getErrorMessage } from '../lib/api';
+import { ClipboardList, FolderOpen, ArrowRight } from 'lucide-react';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -34,23 +35,40 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard Overview</h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard Overview</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            A snapshot of your grievance workload
+          </p>
+        </div>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-3xl">{stats?.myAssigned ?? 0}</CardTitle>
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              My Assigned Grievances
+            </CardTitle>
+            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 text-primary">
+              <ClipboardList className="w-5 h-5" />
+            </span>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">My Assigned Grievances</p>
+            <div className="text-3xl font-bold text-foreground">{stats?.myAssigned ?? 0}</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-3xl">{stats?.totalOpen ?? 0}</CardTitle>
+        <Card className="card-hover">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Open Grievances
+            </CardTitle>
+            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent/20 text-accent-foreground">
+              <FolderOpen className="w-5 h-5" />
+            </span>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Total Open Grievances</p>
+            <div className="text-3xl font-bold text-foreground">{stats?.totalOpen ?? 0}</div>
           </CardContent>
         </Card>
       </div>
@@ -65,8 +83,8 @@ export default function DashboardOverview() {
               {stats.recentActivity.map((activity) => (
                 <div key={activity._id} className="flex items-start justify-between gap-4 border-b pb-3 last:border-0">
                   <div>
-                    <p className="text-sm">{activity.content}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-foreground">{activity.content}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {activity.grievanceId?.referenceCode ?? 'Unknown'} &middot;{' '}
                       {new Date(activity.createdAt).toLocaleString()}
                     </p>
@@ -88,9 +106,10 @@ export default function DashboardOverview() {
       <div className="flex gap-4">
         <Link
           to="/dashboard/grievances"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex items-center gap-2 justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
         >
           View All Grievances
+          <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
     </div>

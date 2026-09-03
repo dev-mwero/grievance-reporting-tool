@@ -72,7 +72,10 @@ export default function CategoriesManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Categories</h2>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Categories</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage grievance categories</p>
+        </div>
         <Button onClick={() => setShowCreate(!showCreate)}>
           {showCreate ? 'Cancel' : 'Create Category'}
         </Button>

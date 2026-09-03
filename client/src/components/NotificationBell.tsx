@@ -56,7 +56,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="relative inline-flex items-center justify-center w-9 h-9 rounded-md hover:bg-primary-foreground/10"
+        className="relative inline-flex items-center justify-center w-9 h-9 rounded-lg hover:bg-accent/60 text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Notifications"
       >
         <svg
@@ -74,7 +74,7 @@ export default function NotificationBell() {
           />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] font-bold text-white">
+          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-accent-foreground text-[10px] font-bold">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

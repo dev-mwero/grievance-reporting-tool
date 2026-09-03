@@ -46,7 +46,10 @@ export default function Profile() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">My Profile</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">My Profile</h1>
+          <p className="text-sm text-muted-foreground mt-1">Your account details and information</p>
+        </div>
         <Badge variant={ROLE_VARIANTS[profile.role] || 'default'}>
           {profile.role.replace(/_/g, ' ')}
         </Badge>
@@ -60,20 +63,20 @@ export default function Profile() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-muted-foreground">Title</p>
-              <p className="font-medium">{profile.title || '—'}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Title</p>
+              <p className="font-medium text-foreground">{profile.title || '—'}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Department</p>
-              <p className="font-medium">{profile.department || '—'}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Department</p>
+              <p className="font-medium text-foreground">{profile.department || '—'}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Phone</p>
-              <p className="font-medium">{profile.phone || '—'}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Phone</p>
+              <p className="font-medium text-foreground">{profile.phone || '—'}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Status</p>
-              <p className="font-medium">
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Status</p>
+              <p className="font-medium text-foreground">
                 {profile.isActive ? (
                   <span className="text-green-700">Active</span>
                 ) : (
@@ -82,12 +85,12 @@ export default function Profile() {
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Last Login</p>
-              <p className="font-medium">{formatDate(profile.lastLoginAt)}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Last Login</p>
+              <p className="font-medium text-foreground">{formatDate(profile.lastLoginAt)}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Member Since</p>
-              <p className="font-medium">{formatDate(profile.createdAt)}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Member Since</p>
+              <p className="font-medium text-foreground">{formatDate(profile.createdAt)}</p>
             </div>
           </div>
         </CardContent>

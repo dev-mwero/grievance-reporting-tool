@@ -91,9 +91,9 @@ export default function SubmitGrievance() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-muted rounded-md text-center">
+            <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg text-center">
               <p className="text-sm text-muted-foreground mb-1">Your Reference Code</p>
-              <p className="text-2xl font-mono font-bold">{result.referenceCode}</p>
+              <p className="text-2xl font-mono font-bold text-primary">{result.referenceCode}</p>
             </div>
             <Button
               variant="outline"

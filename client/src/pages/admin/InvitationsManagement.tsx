@@ -80,7 +80,10 @@ export default function InvitationsManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Invitations</h2>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Invitations</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Send and manage staff invitations</p>
+        </div>
         <Button onClick={() => setShowCreate(!showCreate)}>
           {showCreate ? 'Cancel' : 'Send Invitation'}
         </Button>

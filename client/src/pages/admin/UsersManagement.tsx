@@ -75,7 +75,10 @@ export default function UsersManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Users</h2>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Users</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage system users and roles</p>
+        </div>
         <Button onClick={() => setShowCreate(!showCreate)}>
           {showCreate ? 'Cancel' : 'Create User'}
         </Button>

@@ -178,7 +178,7 @@ export default function GrievanceDetail() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold font-mono truncate">{grievance.referenceCode}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold font-mono text-primary truncate">{grievance.referenceCode}</h1>
           <p className="text-sm text-muted-foreground">
             Submitted {formatDate(grievance.submittedAt)}
           </p>
@@ -195,20 +195,20 @@ export default function GrievanceDetail() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="text-muted-foreground">Sub-County</p>
-              <p className="font-medium">{grievance.subCountyName}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Sub-County</p>
+              <p className="font-medium text-foreground">{grievance.subCountyName}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Ward</p>
-              <p className="font-medium">{grievance.wardName}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Ward</p>
+              <p className="font-medium text-foreground">{grievance.wardName}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Category</p>
-              <p className="font-medium">{grievance.categoryName}</p>
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Category</p>
+              <p className="font-medium text-foreground">{grievance.categoryName}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Primary Assignee</p>
-              <p className="font-medium">
+              <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Primary Assignee</p>
+              <p className="font-medium text-foreground">
                 {typeof grievance.primaryAssigneeId === 'object'
                   ? grievance.primaryAssigneeId?.name
                   : 'Unassigned'}
@@ -217,7 +217,7 @@ export default function GrievanceDetail() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground mb-1">Description</p>
-            <p className="text-sm whitespace-pre-wrap">{grievance.description}</p>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{grievance.description}</p>
           </div>
         </CardContent>
       </Card>

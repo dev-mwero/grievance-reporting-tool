@@ -100,7 +100,10 @@ export default function WardsManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Wards</h2>
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Wards</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage wards within sub-counties</p>
+        </div>
         <Button onClick={() => setShowCreate(!showCreate)}>
           {showCreate ? 'Cancel' : 'Create Ward'}
         </Button>

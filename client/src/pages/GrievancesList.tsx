@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/auth-context';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import { getErrorMessage } from '../lib/api';
+import { Download, FilterX, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -165,7 +166,12 @@ export default function GrievancesList() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Grievances</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Grievances</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Review and manage reported issues
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -173,10 +179,12 @@ export default function GrievancesList() {
             onClick={exportCSV}
             disabled={!data?.data || data.data.length === 0}
           >
+            <Download className="w-4 h-4" />
             Export CSV
           </Button>
           {hasActiveFilters && (
             <Button variant="outline" size="sm" onClick={resetFilters}>
+              <FilterX className="w-4 h-4" />
               Clear Filters
             </Button>
           )}
@@ -194,6 +202,7 @@ export default function GrievancesList() {
                 className="flex-1"
               />
               <Button type="submit" variant="secondary">
+                <Search className="w-4 h-4" />
                 Search
               </Button>
             </form>
@@ -330,16 +339,16 @@ export default function GrievancesList() {
                 <Link
                   key={g._id}
                   to={`/dashboard/grievances/${g._id}`}
-                  className="block border rounded-lg p-4 hover:bg-accent/50 transition-colors"
+                  className="block border rounded-xl p-4 hover:bg-accent/40 hover:border-primary/30 transition-all duration-200"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-sm font-semibold">{g.referenceCode}</span>
+                    <span className="font-mono text-sm font-semibold text-primary">{g.referenceCode}</span>
                     <Badge variant={STATUS_VARIANTS[g.status] || 'default'}>
                       {g.status.replace(/_/g, ' ')}
                     </Badge>
                   </div>
-                  <p className="text-sm line-clamp-2 mb-2">{g.description}</p>
-                  <div className="flex gap-4 text-xs text-muted-foreground">
+                  <p className="text-sm text-foreground line-clamp-2 mb-2">{g.description}</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{g.subCountyName} / {g.wardName}</span>
                     <span>{g.categoryName}</span>
                     <span>{new Date(g.submittedAt).toLocaleDateString()}</span>
@@ -359,6 +368,7 @@ export default function GrievancesList() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
               >
+                <ChevronLeft className="w-4 h-4" />
                 Previous
               </Button>
               <span className="text-sm text-muted-foreground">
@@ -371,6 +381,7 @@ export default function GrievancesList() {
                 onClick={() => setPage((p) => p + 1)}
               >
                 Next
+                <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
           )}
