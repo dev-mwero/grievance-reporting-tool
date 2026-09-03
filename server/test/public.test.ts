@@ -27,6 +27,49 @@ describe('Public Grievance API', () => {
     });
   });
 
+  describe('GET /api/public/stats', () => {
+    it('returns public stats with zero counts initially', async () => {
+      const res = await request(app).get('/api/public/stats');
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toEqual({
+        totalGrievances: 0,
+        resolvedGrievances: 0,
+        activeCategories: 1,
+        activeSubCounties: 1,
+      });
+    });
+
+    it('reflects submitted and resolved grievances', async () => {
+      // Submit a grievance
+      const submitRes = await request(app)
+        .post('/api/public/grievances')
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'Pothole on the main road needs repair');
+
+      expect(submitRes.status).toBe(201);
+
+      // Mark it resolved directly in the DB
+      const grievance = await Grievance.findOne({
+        referenceCode: submitRes.body.data.referenceCode,
+      });
+      expect(grievance).not.toBeNull();
+      await Grievance.updateOne(
+        { _id: grievance!._id },
+        { status: 'RESOLVED' }
+      );
+
+      const res = await request(app).get('/api/public/stats');
+      expect(res.status).toBe(200);
+      expect(res.body.data.totalGrievances).toBe(1);
+      expect(res.body.data.resolvedGrievances).toBe(1);
+      expect(res.body.data.activeCategories).toBe(1);
+      expect(res.body.data.activeSubCounties).toBe(1);
+    });
+  });
+
   describe('GET /api/public/sub-counties', () => {
     it('returns active sub-counties', async () => {
       const res = await request(app).get('/api/public/sub-counties');

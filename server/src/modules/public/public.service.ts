@@ -30,6 +30,25 @@ export async function getActiveCategories() {
   return GrievanceCategory.find({ isActive: true }).sort({ name: 1 });
 }
 
+// ─── Public Stats (for landing page) ────────────────────────────────────────
+
+export async function getPublicStats() {
+  const [totalGrievances, resolvedGrievances, activeCategories, activeSubCounties] =
+    await Promise.all([
+      Grievance.countDocuments(),
+      Grievance.countDocuments({ status: { $in: ['RESOLVED', 'CLOSED'] } }),
+      GrievanceCategory.countDocuments({ isActive: true }),
+      SubCounty.countDocuments({ isActive: true }),
+    ]);
+
+  return {
+    totalGrievances,
+    resolvedGrievances,
+    activeCategories,
+    activeSubCounties,
+  };
+}
+
 // ─── Submit Grievance ───────────────────────────────────────────────────────
 
 /**
