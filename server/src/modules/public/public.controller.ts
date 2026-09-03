@@ -32,6 +32,17 @@ export async function listCategories(_req: Request, res: Response): Promise<void
   });
 }
 
+// ─── Public Stats ───────────────────────────────────────────────────────────
+
+export async function getPublicStats(_req: Request, res: Response): Promise<void> {
+  const stats = await publicService.getPublicStats();
+
+  res.json({
+    success: true,
+    data: stats,
+  });
+}
+
 // ─── Submit Grievance ───────────────────────────────────────────────────────
 
 export async function submitGrievance(req: Request, res: Response): Promise<void> {

@@ -25,6 +25,9 @@ router.get(
 // GET /api/public/categories
 router.get('/categories', publicController.listCategories);
 
+// GET /api/public/stats
+router.get('/stats', publicController.getPublicStats);
+
 // ─── Submit Grievance (Public, no auth) ─────────────────────────────────────
 
 // POST /api/public/grievances
