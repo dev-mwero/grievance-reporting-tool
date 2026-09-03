@@ -120,7 +120,7 @@ export default function TrackGrievance() {
               <p className="text-sm whitespace-pre-wrap">{result.description}</p>
             </div>
 
-            <div className="border-t pt-4 grid grid-cols-3 gap-4 text-sm">
+            <div className="border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Acknowledged</p>
                 <p className="font-medium">{formatDate(result.acknowledgedAt)}</p>

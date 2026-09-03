@@ -158,7 +158,7 @@ export default function UsersManagement() {
         </Card>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-3">
         <Input
           value={search}
           onChange={(e) => {
@@ -174,7 +174,7 @@ export default function UsersManagement() {
             setRoleFilter(e.target.value);
             setPage(1);
           }}
-          className="w-48"
+          className="w-full sm:w-48"
         >
           <option value="">All Roles</option>
           {ROLES.map((r) => (

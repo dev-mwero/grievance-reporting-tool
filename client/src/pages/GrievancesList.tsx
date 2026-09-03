@@ -125,7 +125,7 @@ export default function GrievancesList() {
 
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-3">
             <form onSubmit={handleSearch} className="flex gap-2 flex-1">
               <Input
                 value={searchInput}
@@ -143,12 +143,13 @@ export default function GrievancesList() {
                 setMyAssigned(!myAssigned);
                 setPage(1);
               }}
+              className="shrink-0"
             >
               My Assigned
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Select
               value={status}
               onChange={(e) => {
@@ -212,7 +213,7 @@ export default function GrievancesList() {
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Select
               value={assigneeId}
               onChange={(e) => {

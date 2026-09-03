@@ -211,7 +211,7 @@ export default function WardsManagement() {
         </Card>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex flex-col sm:flex-row gap-3">
         <Input
           value={search}
           onChange={(e) => {
@@ -227,7 +227,7 @@ export default function WardsManagement() {
             setSubCountyFilter(e.target.value);
             setPage(1);
           }}
-          className="w-48"
+          className="w-full sm:w-48"
         >
           <option value="">All Sub-Counties</option>
           {subCounties?.data?.map((sc) => (
