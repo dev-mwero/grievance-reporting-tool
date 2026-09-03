@@ -3,6 +3,8 @@ import { Ward } from '../../models/ward.model';
 import { GrievanceCategory } from '../../models/grievance-category.model';
 import { Grievance } from '../../models/grievance.model';
 import { ApiError } from '../../utils/api-error';
+import { logGrievanceEvent } from '../../services/audit-impl';
+import { AuditAction } from '../../services/audit.service';
 import type { SubmitGrievanceInput } from './public.validation';
 
 // ─── Lookup Data (Public) ───────────────────────────────────────────────────
@@ -59,6 +61,15 @@ export async function submitGrievance(input: SubmitGrievanceInput) {
     description: input.description,
     submittedAt: new Date(),
   });
+
+  // Audit log (anonymous submission)
+  await logGrievanceEvent(
+    AuditAction.GRIEVANCE_SUBMITTED,
+    grievance._id.toString(),
+    undefined,
+    undefined,
+    { referenceCode: grievance.referenceCode }
+  );
 
   return {
     referenceCode: grievance.referenceCode,

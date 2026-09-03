@@ -1,6 +1,8 @@
 import { SubCounty } from '../../models/sub-county.model';
 import { Ward } from '../../models/ward.model';
 import { ApiError } from '../../utils/api-error';
+import { logSubCountyEvent, logWardEvent } from '../../services/audit-impl';
+import { AuditAction } from '../../services/audit.service';
 import type {
   ListSubCountiesQuery,
   CreateSubCountyInput,
@@ -62,6 +64,12 @@ export async function createSubCounty(input: CreateSubCountyInput) {
   }
 
   const subCounty = await SubCounty.create(input);
+
+  await logSubCountyEvent(AuditAction.SUBCOUNTY_CREATED, subCounty._id.toString(), undefined, undefined, {
+    name: subCounty.name,
+    code: subCounty.code,
+  });
+
   return subCounty;
 }
 
@@ -80,6 +88,10 @@ export async function updateSubCounty(subCountyId: string, input: UpdateSubCount
 
   Object.assign(subCounty, input);
   await subCounty.save();
+
+  await logSubCountyEvent(AuditAction.SUBCOUNTY_UPDATED, subCounty._id.toString(), undefined, undefined, {
+    changes: Object.keys(input),
+  });
 
   return subCounty;
 }
@@ -163,6 +175,13 @@ export async function createWard(input: CreateWardInput) {
   }
 
   const ward = await Ward.create(input);
+
+  await logWardEvent(AuditAction.WARD_CREATED, ward._id.toString(), undefined, undefined, {
+    name: ward.name,
+    code: ward.code,
+    subCountyId: input.subCountyId,
+  });
+
   return ward;
 }
 
@@ -194,6 +213,10 @@ export async function updateWard(wardId: string, input: UpdateWardInput) {
 
   Object.assign(ward, input);
   await ward.save();
+
+  await logWardEvent(AuditAction.WARD_UPDATED, ward._id.toString(), undefined, undefined, {
+    changes: Object.keys(input),
+  });
 
   return ward;
 }

@@ -5,6 +5,8 @@ import { Invitation } from '../../models/invitation.model';
 import { generateSecureToken, hashToken } from '../../utils/token';
 import { ApiError } from '../../utils/api-error';
 import { env } from '../../config/env';
+import { logUserEvent } from '../../services/audit-impl';
+import { AuditAction } from '../../services/audit.service';
 import type {
   ListUsersQuery,
   CreateUserInput,
@@ -83,6 +85,11 @@ export async function createUser(input: CreateUserInput) {
     isActive: true,
   });
 
+  await logUserEvent(AuditAction.USER_CREATED, user._id.toString(), undefined, undefined, {
+    email: user.email,
+    role: user.role,
+  });
+
   return user;
 }
 
@@ -108,6 +115,10 @@ export async function updateUser(userId: string, input: UpdateUserInput) {
   Object.assign(user, input);
   await user.save();
 
+  await logUserEvent(AuditAction.USER_UPDATED, user._id.toString(), undefined, undefined, {
+    changes: Object.keys(input),
+  });
+
   return user;
 }
 
@@ -131,6 +142,8 @@ export async function deactivateUser(userId: string) {
 
   user.isActive = false;
   await user.save();
+
+  await logUserEvent(AuditAction.USER_DEACTIVATED, user._id.toString(), undefined, undefined);
 
   return user;
 }

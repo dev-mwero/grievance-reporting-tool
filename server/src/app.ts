@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import { env } from './config/env';
 import { errorHandler } from './middleware/error-handler';
 import { notFound } from './middleware/not-found';
@@ -13,6 +14,7 @@ import categoriesRoutes from './modules/categories/categories.routes';
 import locationsRoutes from './modules/locations/locations.routes';
 import publicRoutes from './modules/public/public.routes';
 import grievanceRoutes from './modules/grievances/grievances.routes';
+import attachmentRoutes from './modules/attachments/attachments.routes';
 
 const app = express();
 
@@ -46,11 +48,15 @@ app.use('/api', limiter);
 // Request logging
 app.use(requestLogger);
 
+// Static file serving for uploaded attachments
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+
 // Routes
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/grievances', grievanceRoutes);
+app.use('/api/grievances', attachmentRoutes);
 app.use('/api/admin/users', usersRoutes);
 app.use('/api/admin/categories', categoriesRoutes);
 app.use('/api/admin', locationsRoutes);

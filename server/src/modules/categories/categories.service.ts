@@ -1,5 +1,7 @@
 import { GrievanceCategory } from '../../models/grievance-category.model';
 import { ApiError } from '../../utils/api-error';
+import { logCategoryEvent } from '../../services/audit-impl';
+import { AuditAction } from '../../services/audit.service';
 import type {
   ListCategoriesQuery,
   CreateCategoryInput,
@@ -59,6 +61,11 @@ export async function createCategory(input: CreateCategoryInput) {
   }
 
   const category = await GrievanceCategory.create(input);
+
+  await logCategoryEvent(AuditAction.CATEGORY_CREATED, category._id.toString(), undefined, undefined, {
+    name: category.name,
+  });
+
   return category;
 }
 
@@ -80,6 +87,10 @@ export async function updateCategory(categoryId: string, input: UpdateCategoryIn
   Object.assign(category, input);
   await category.save();
 
+  await logCategoryEvent(AuditAction.CATEGORY_UPDATED, category._id.toString(), undefined, undefined, {
+    changes: Object.keys(input),
+  });
+
   return category;
 }
 
@@ -93,6 +104,8 @@ export async function deactivateCategory(categoryId: string) {
 
   category.isActive = false;
   await category.save();
+
+  await logCategoryEvent(AuditAction.CATEGORY_DEACTIVATED, category._id.toString(), undefined, undefined);
 
   return category;
 }

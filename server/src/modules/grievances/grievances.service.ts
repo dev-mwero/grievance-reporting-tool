@@ -4,6 +4,8 @@ import { GrievanceAssignment } from '../../models/grievance-assignment.model';
 import { User } from '../../models/user.model';
 import { ApiError } from '../../utils/api-error';
 import { canTransition, type GrievanceStatus } from 'shared';
+import { logGrievanceEvent } from '../../services/audit-impl';
+import { AuditAction } from '../../services/audit.service';
 import type {
   ListGrievancesQuery,
   UpdateStatusInput,
@@ -118,6 +120,8 @@ export async function updateStatus(
     );
   }
 
+  const previousStatus = grievance.status;
+
   // Update status
   grievance.status = input.status;
 
@@ -145,6 +149,21 @@ export async function updateStatus(
     authorId: userId,
     authorName: userName,
   });
+
+  // Audit log
+  const actionMap: Record<string, AuditAction> = {
+    ACKNOWLEDGED: AuditAction.GRIEVANCE_ACKNOWLEDGED,
+    RESOLVED: AuditAction.GRIEVANCE_RESOLVED,
+    CLOSED: AuditAction.GRIEVANCE_CLOSED,
+    REJECTED: AuditAction.GRIEVANCE_REJECTED,
+  };
+  await logGrievanceEvent(
+    actionMap[input.status] || AuditAction.GRIEVANCE_STATUS_CHANGED,
+    grievanceId,
+    userId,
+    userName,
+    { from: previousStatus, to: input.status }
+  );
 
   return grievance;
 }
@@ -232,6 +251,18 @@ export async function assignGrievance(
     authorName: assignedByName,
   });
 
+  // Audit log
+  await logGrievanceEvent(
+    AuditAction.GRIEVANCE_ASSIGNED,
+    grievanceId,
+    assignedById,
+    assignedByName,
+    {
+      primaryAssigneeId: input.primaryAssigneeId,
+      supportingAssigneeIds: input.supportingAssigneeIds,
+    }
+  );
+
   return grievance;
 }
 
@@ -255,6 +286,16 @@ export async function addUpdate(
     authorId: userId,
     authorName: userName,
   });
+
+  // Audit log
+  await logGrievanceEvent(
+    input.type === UpdateType.PUBLIC_UPDATE
+      ? AuditAction.PUBLIC_UPDATE_ADDED
+      : AuditAction.INTERNAL_NOTE_ADDED,
+    grievanceId,
+    userId,
+    userName
+  );
 
   return update;
 }

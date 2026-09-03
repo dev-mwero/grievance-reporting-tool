@@ -13,6 +13,8 @@ import {
 } from '../../utils/token';
 import { ApiError } from '../../utils/api-error';
 import { env } from '../../config/env';
+import { logAuthEvent, logUserEvent } from '../../services/audit-impl';
+import { AuditAction } from '../../services/audit.service';
 import type {
   LoginInput,
   ForgotPasswordInput,
@@ -41,12 +43,15 @@ export async function login(input: LoginInput) {
 
   const isPasswordValid = await bcrypt.compare(input.password, user.passwordHash);
   if (!isPasswordValid) {
+    await logAuthEvent(AuditAction.LOGIN_FAILED, input.email.toLowerCase());
     throw ApiError.unauthorized('Invalid email or password');
   }
 
   // Update last login
   user.lastLoginAt = new Date();
   await user.save();
+
+  await logAuthEvent(AuditAction.LOGIN_SUCCESS, user.email, user._id.toString());
 
   // Generate tokens
   const accessToken = generateAccessToken({
@@ -158,6 +163,8 @@ export async function resetPassword(input: ResetPasswordInput) {
   resetToken.usedAt = new Date();
   await resetToken.save();
 
+  await logAuthEvent(AuditAction.PASSWORD_RESET_COMPLETED, user.email, user._id.toString());
+
   return { message: 'Password reset successful' };
 }
 
@@ -201,6 +208,8 @@ export async function acceptInvitation(input: AcceptInvitationInput) {
   // Mark invitation as accepted
   invitation.acceptedAt = new Date();
   await invitation.save();
+
+  await logUserEvent(AuditAction.INVITATION_ACCEPTED, user._id.toString(), user._id.toString(), user.name);
 
   // Generate tokens
   const accessToken = generateAccessToken({

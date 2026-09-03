@@ -40,6 +40,7 @@ export interface AuditEvent {
   entityId: string;
   actorId?: string;
   actorType: ActorType;
+  actorName?: string;
   metadata?: Record<string, unknown>;
   timestamp: Date;
 }
