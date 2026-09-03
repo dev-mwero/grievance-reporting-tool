@@ -12,6 +12,7 @@ import usersRoutes from './modules/users/users.routes';
 import categoriesRoutes from './modules/categories/categories.routes';
 import locationsRoutes from './modules/locations/locations.routes';
 import publicRoutes from './modules/public/public.routes';
+import grievanceRoutes from './modules/grievances/grievances.routes';
 
 const app = express();
 
@@ -49,12 +50,10 @@ app.use(requestLogger);
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/grievances', grievanceRoutes);
 app.use('/api/admin/users', usersRoutes);
 app.use('/api/admin/categories', categoriesRoutes);
 app.use('/api/admin', locationsRoutes);
-
-// Placeholder route groups (will be added in subsequent prompts)
-// app.use('/api/grievances', grievanceRoutes);
 
 // 404 handler
 app.use(notFound);
