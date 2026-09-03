@@ -16,6 +16,7 @@ import publicRoutes from './modules/public/public.routes';
 import grievanceRoutes from './modules/grievances/grievances.routes';
 import attachmentRoutes from './modules/attachments/attachments.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
+import notificationRoutes from './modules/notifications/notifications.routes';
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/admin/users', usersRoutes);
 app.use('/api/admin/categories', categoriesRoutes);
 app.use('/api/admin', locationsRoutes);
 app.use('/api/admin/analytics', analyticsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use(notFound);

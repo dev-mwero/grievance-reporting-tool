@@ -9,3 +9,4 @@ export { Attachment, type IAttachment } from './attachment.model';
 export { AuditLog, type IAuditLog } from './audit-log.model';
 export { PasswordResetToken, type IPasswordResetToken } from './password-reset-token.model';
 export { GrievanceAssignment, type IGrievanceAssignment } from './grievance-assignment.model';
+export { Notification, type INotification } from './notification.model';

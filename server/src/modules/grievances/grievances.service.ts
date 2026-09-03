@@ -6,6 +6,7 @@ import { ApiError } from '../../utils/api-error';
 import { canTransition, type GrievanceStatus } from 'shared';
 import { logGrievanceEvent } from '../../services/audit-impl';
 import { AuditAction } from '../../services/audit.service';
+import { createNotifications } from '../../services/notification.service';
 import type {
   ListGrievancesQuery,
   UpdateStatusInput,
@@ -165,6 +166,20 @@ export async function updateStatus(
     { from: previousStatus, to: input.status }
   );
 
+  // Notify the primary assignee about the status change
+  if (grievance.primaryAssigneeId) {
+    await createNotifications([
+      {
+        recipientId: grievance.primaryAssigneeId.toString(),
+        type: 'GRIEVANCE_STATUS_CHANGED',
+        title: `Grievance ${grievance.referenceCode} status updated`,
+        message: `Status changed from ${previousStatus} to ${input.status}`,
+        grievanceId: grievance._id.toString(),
+        referenceCode: grievance.referenceCode,
+      },
+    ]);
+  }
+
   return grievance;
 }
 
@@ -261,6 +276,22 @@ export async function assignGrievance(
       primaryAssigneeId: input.primaryAssigneeId,
       supportingAssigneeIds: input.supportingAssigneeIds,
     }
+  );
+
+  // Notify the primary and supporting assignees
+  const assigneeIds = [
+    input.primaryAssigneeId,
+    ...input.supportingAssigneeIds,
+  ];
+  await createNotifications(
+    assigneeIds.map((assigneeId) => ({
+      recipientId: assigneeId,
+      type: 'GRIEVANCE_ASSIGNED' as const,
+      title: `Grievance ${grievance.referenceCode} assigned to you`,
+      message: `You have been assigned to grievance ${grievance.referenceCode} by ${assignedByName}`,
+      grievanceId: grievance._id.toString(),
+      referenceCode: grievance.referenceCode,
+    }))
   );
 
   return grievance;

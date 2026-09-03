@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router';
 import { useAuth } from '../contexts/auth-context';
 import { Button } from '../components/ui/button';
+import NotificationBell from '../components/NotificationBell';
 
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
@@ -97,6 +98,7 @@ export default function DashboardLayout() {
             </Link>
           </div>
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            <NotificationBell />
             <span className="text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none">
               {user?.name} ({user?.role})
             </span>
