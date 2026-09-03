@@ -8,6 +8,9 @@ import { notFound } from './middleware/not-found';
 import { requestLogger } from './middleware/request-logger';
 import healthRoutes from './modules/health/health.routes';
 import authRoutes from './modules/auth/auth.routes';
+import usersRoutes from './modules/users/users.routes';
+import categoriesRoutes from './modules/categories/categories.routes';
+import locationsRoutes from './modules/locations/locations.routes';
 
 const app = express();
 
@@ -44,11 +47,13 @@ app.use(requestLogger);
 // Routes
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/admin/users', usersRoutes);
+app.use('/api/admin/categories', categoriesRoutes);
+app.use('/api/admin', locationsRoutes);
 
 // Placeholder route groups (will be added in subsequent prompts)
 // app.use('/api/public', publicRoutes);
 // app.use('/api/grievances', grievanceRoutes);
-// app.use('/api/admin', adminRoutes);
 
 // 404 handler
 app.use(notFound);

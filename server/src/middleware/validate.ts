@@ -1,16 +1,20 @@
 import type { Request, Response, NextFunction } from 'express';
 import { type ZodSchema } from 'zod';
 
+type ValidateTarget = 'body' | 'query' | 'params';
+
 /**
  * Generic Zod validation middleware.
- * Validates req.body against the provided schema.
+ * Validates the specified request part against the provided schema.
  *
  * @example
  * router.post('/login', validate(loginSchema), controller.login);
+ * router.get('/users', validate(listUsersQuerySchema, 'query'), controller.listUsers);
  */
-export function validate(schema: ZodSchema) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
-    const result = schema.safeParse(req.body);
+export function validate(schema: ZodSchema, target: ValidateTarget = 'body') {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const data = target === 'body' ? req.body : target === 'query' ? req.query : req.params;
+    const result = schema.safeParse(data);
 
     if (!result.success) {
       const errors: Record<string, string[]> = {};
@@ -20,7 +24,7 @@ export function validate(schema: ZodSchema) {
         errors[path].push(err.message);
       });
 
-      _res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Validation error',
         errors,
@@ -28,8 +32,11 @@ export function validate(schema: ZodSchema) {
       return;
     }
 
-    // Replace req.body with validated/sanitized data
-    req.body = result.data;
+    // Store the validated/sanitized data on a custom property.
+    // NOTE: We cannot assign to req.query/req.params directly because in
+    // Express 5 they are getter-only properties (lazy query parsing).
+    req.validated = result.data as Record<string, unknown>;
+
     next();
   };
 }
