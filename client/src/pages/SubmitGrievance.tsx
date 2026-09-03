@@ -1,20 +1,43 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select } from '../components/ui/select';
-import { Textarea } from '../components/ui/textarea';
+import RichTextEditor from '../components/RichTextEditor';
 import { getSubCounties, getWards, getCategories, submitGrievance } from '../services/public.service';
 import { getErrorMessage } from '../lib/api';
 import { validateRequired, validateMinLength } from '../lib/validation';
+import { Upload, X, FileText, Paperclip } from 'lucide-react';
+
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+const ALLOWED_FILE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function SubmitGrievance() {
   const [subCountyId, setSubCountyId] = useState('');
   const [wardId, setWardId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState('');
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{
     subCountyId?: string;
@@ -23,7 +46,8 @@ export default function SubmitGrievance() {
     description?: string;
   }>({});
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ referenceCode: string } | null>(null);
+  const [result, setResult] = useState<{ referenceCode: string; attachmentCount?: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: subCounties = [] } = useQuery({
     queryKey: ['sub-counties'],
@@ -46,6 +70,40 @@ export default function SubmitGrievance() {
     setWardId('');
   }, [subCountyId]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError('');
+    const selected = Array.from(e.target.files ?? []);
+
+    // Check max file count
+    if (files.length + selected.length > MAX_FILES) {
+      setFileError(`You can upload a maximum of ${MAX_FILES} files.`);
+      e.target.value = '';
+      return;
+    }
+
+    // Validate each file
+    for (const file of selected) {
+      if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+        setFileError(`File "${file.name}" has an unsupported type. Allowed: images, PDF, DOC, DOCX, TXT.`);
+        e.target.value = '';
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setFileError(`File "${file.name}" exceeds the 10MB size limit.`);
+        e.target.value = '';
+        return;
+      }
+    }
+
+    setFiles((prev) => [...prev, ...selected]);
+    e.target.value = '';
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFileError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -54,7 +112,9 @@ export default function SubmitGrievance() {
     const subCountyError = validateRequired(subCountyId, 'Sub-County');
     const wardError = validateRequired(wardId, 'Ward');
     const categoryError = validateRequired(categoryId, 'Category');
-    const descriptionError = validateMinLength(description, 10, 'Description');
+    // Strip HTML tags for length validation
+    const plainText = description.replace(/<[^>]*>/g, '').trim();
+    const descriptionError = validateMinLength(plainText, 10, 'Description');
     setFieldErrors({
       subCountyId: subCountyError,
       wardId: wardError,
@@ -71,6 +131,7 @@ export default function SubmitGrievance() {
         wardId,
         categoryId,
         description,
+        files: files.length > 0 ? files : undefined,
       });
       setResult(result);
     } catch (err) {
@@ -95,6 +156,11 @@ export default function SubmitGrievance() {
               <p className="text-sm text-muted-foreground mb-1">Your Reference Code</p>
               <p className="text-2xl font-mono font-bold text-primary">{result.referenceCode}</p>
             </div>
+            {result.attachmentCount && result.attachmentCount > 0 && (
+              <p className="text-sm text-muted-foreground text-center">
+                {result.attachmentCount} attachment{result.attachmentCount > 1 ? 's' : ''} uploaded successfully.
+              </p>
+            )}
             <Button
               variant="outline"
               className="w-full"
@@ -104,6 +170,7 @@ export default function SubmitGrievance() {
                 setWardId('');
                 setCategoryId('');
                 setDescription('');
+                setFiles([]);
               }}
             >
               Submit Another Grievance
@@ -197,25 +264,80 @@ export default function SubmitGrievance() {
 
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
+              <RichTextEditor
                 value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
+                onChange={(html) => {
+                  setDescription(html);
                   setFieldErrors((f) => ({ ...f, description: undefined }));
                 }}
                 placeholder="Describe the issue in detail..."
-                required
-                minLength={10}
-                maxLength={10000}
-                rows={6}
               />
               {fieldErrors.description && (
                 <p className="text-xs text-destructive">{fieldErrors.description}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                {description.length}/10000 characters
+                Supports basic formatting: bold, italic, lists, links, headings.
               </p>
+            </div>
+
+            {/* File attachments */}
+            <div className="space-y-2">
+              <Label>Attachments (Optional)</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.txt"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  id="attachment-input"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={files.length >= MAX_FILES}
+                >
+                  <Paperclip className="w-4 h-4" />
+                  Add Files ({files.length}/{MAX_FILES})
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Images, PDF, DOC, DOCX, TXT. Max 10MB each.
+                </span>
+              </div>
+
+              {fileError && (
+                <p className="text-xs text-destructive">{fileError}</p>
+              )}
+
+              {files.length > 0 && (
+                <div className="space-y-2">
+                  {files.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between gap-3 p-2.5 border rounded-lg bg-muted/30"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-sm truncate">{file.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {formatFileSize(file.size)}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        aria-label={`Remove ${file.name}`}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {error && (
@@ -225,7 +347,14 @@ export default function SubmitGrievance() {
             )}
 
             <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? 'Submitting...' : 'Submit Grievance'}
+              {submitting ? (
+                'Submitting...'
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Submit Grievance
+                </>
+              )}
             </Button>
           </form>
         </CardContent>

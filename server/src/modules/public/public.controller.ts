@@ -36,7 +36,8 @@ export async function listCategories(_req: Request, res: Response): Promise<void
 
 export async function submitGrievance(req: Request, res: Response): Promise<void> {
   const input = req.validated as unknown as SubmitGrievanceInput;
-  const result = await publicService.submitGrievance(input);
+  const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const result = await publicService.submitGrievance(input, files);
 
   res.status(201).json({
     success: true,

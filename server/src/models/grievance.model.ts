@@ -82,7 +82,7 @@ const grievanceSchema = new Schema<IGrievance>(
     description: {
       type: String,
       required: [true, 'Description is required'],
-      maxlength: [10000, 'Description cannot exceed 10000 characters'],
+      maxlength: [20000, 'Description cannot exceed 20000 characters'],
     },
     status: {
       type: String,

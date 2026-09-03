@@ -41,6 +41,31 @@ export function errorHandler(
     return;
   }
 
+  // Handle Multer errors (file upload)
+  if (err.name === 'MulterError') {
+    const multerErr = err as Error & { code?: string };
+    const message =
+      multerErr.code === 'LIMIT_FILE_SIZE'
+        ? 'File exceeds the maximum allowed size (10MB)'
+        : multerErr.code === 'LIMIT_UNEXPECTED_FILE'
+          ? 'Too many files uploaded. Maximum is 5.'
+          : `Upload error: ${err.message}`;
+    res.status(400).json({
+      success: false,
+      message,
+    });
+    return;
+  }
+
+  // Handle file filter rejection (unsupported file type)
+  if (err.message && err.message.includes('is not allowed')) {
+    res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+    return;
+  }
+
   // Handle Mongoose validation error
   if (err.name === 'ValidationError') {
     res.status(400).json({

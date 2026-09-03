@@ -3,9 +3,12 @@ import { Ward } from '../../models/ward.model';
 import { GrievanceCategory } from '../../models/grievance-category.model';
 import { Grievance } from '../../models/grievance.model';
 import { GrievanceUpdate } from '../../models/grievance-update.model';
+import { Attachment } from '../../models/attachment.model';
+import { storageService } from '../../services/storage-impl';
 import { ApiError } from '../../utils/api-error';
 import { logGrievanceEvent } from '../../services/audit-impl';
 import { AuditAction } from '../../services/audit.service';
+import sanitizeHtml from 'sanitize-html';
 import type { SubmitGrievanceInput } from './public.validation';
 
 // ─── Lookup Data (Public) ───────────────────────────────────────────────────
@@ -29,7 +32,24 @@ export async function getActiveCategories() {
 
 // ─── Submit Grievance ───────────────────────────────────────────────────────
 
-export async function submitGrievance(input: SubmitGrievanceInput) {
+/**
+ * Allowed HTML tags for rich text descriptions.
+ * Basic formatting only: bold, italic, underline, lists, links, headings.
+ */
+const ALLOWED_HTML_TAGS = [
+  'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's',
+  'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4',
+  'blockquote', 'code', 'pre',
+];
+
+const ALLOWED_HTML_ATTRIBUTES = {
+  a: ['href', 'target', 'rel'],
+};
+
+export async function submitGrievance(
+  input: SubmitGrievanceInput,
+  files: Express.Multer.File[] = []
+) {
   // Validate sub-county exists and is active
   const subCounty = await SubCounty.findById(input.subCountyId);
   if (!subCounty || !subCounty.isActive) {
@@ -51,6 +71,13 @@ export async function submitGrievance(input: SubmitGrievanceInput) {
     throw ApiError.badRequest('Invalid Category');
   }
 
+  // Sanitize rich text description to prevent XSS
+  const sanitizedDescription = sanitizeHtml(input.description, {
+    allowedTags: ALLOWED_HTML_TAGS,
+    allowedAttributes: ALLOWED_HTML_ATTRIBUTES,
+    allowedSchemes: ['http', 'https', 'mailto'],
+  });
+
   // Create grievance with snapshot data
   const grievance = await Grievance.create({
     subCountyId: input.subCountyId,
@@ -59,9 +86,36 @@ export async function submitGrievance(input: SubmitGrievanceInput) {
     subCountyName: subCounty.name,
     wardName: ward.name,
     categoryName: category.name,
-    description: input.description,
+    description: sanitizedDescription,
     submittedAt: new Date(),
   });
+
+  // Upload attachments (if any) — anonymous uploads (uploadedBy: undefined)
+  const uploadedAttachments = [];
+  for (const file of files) {
+    const stored = await storageService.upload(
+      {
+        buffer: file.buffer,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+      },
+      `grievances/${grievance._id.toString()}`
+    );
+
+    const attachment = await Attachment.create({
+      grievanceId: grievance._id,
+      originalName: stored.originalName,
+      mimeType: stored.mimeType,
+      size: stored.size,
+      storageKey: stored.storageKey,
+      url: stored.url,
+      // uploadedBy intentionally omitted — anonymous public submission
+      uploadedAt: new Date(),
+    });
+
+    uploadedAttachments.push(attachment);
+  }
 
   // Audit log (anonymous submission)
   await logGrievanceEvent(
@@ -69,7 +123,10 @@ export async function submitGrievance(input: SubmitGrievanceInput) {
     grievance._id.toString(),
     undefined,
     undefined,
-    { referenceCode: grievance.referenceCode }
+    {
+      referenceCode: grievance.referenceCode,
+      attachmentCount: uploadedAttachments.length,
+    }
   );
 
   return {
@@ -79,6 +136,7 @@ export async function submitGrievance(input: SubmitGrievanceInput) {
     subCountyName: grievance.subCountyName,
     wardName: grievance.wardName,
     categoryName: grievance.categoryName,
+    attachmentCount: uploadedAttachments.length,
   };
 }
 

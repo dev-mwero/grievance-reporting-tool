@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { trackGrievance, type TrackedGrievance } from '../services/public.service';
 import { getErrorMessage } from '../lib/api';
+import { sanitizeRichText } from '../lib/utils';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -117,7 +118,10 @@ export default function TrackGrievance() {
 
             <div>
               <p className="text-sm text-muted-foreground mb-1">Description</p>
-              <p className="text-sm whitespace-pre-wrap">{result.description}</p>
+              <div
+                className="prose prose-sm max-w-none text-foreground"
+                dangerouslySetInnerHTML={{ __html: sanitizeRichText(result.description) }}
+              />
             </div>
 
             <div className="border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">

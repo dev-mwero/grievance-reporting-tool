@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../../middleware/validate';
+import { uploadMultiple } from '../../middleware/upload';
 import {
   submitGrievanceSchema,
   trackGrievanceParamsSchema,
@@ -27,7 +28,14 @@ router.get('/categories', publicController.listCategories);
 // ─── Submit Grievance (Public, no auth) ─────────────────────────────────────
 
 // POST /api/public/grievances
-router.post('/grievances', validate(submitGrievanceSchema), publicController.submitGrievance);
+// Accepts multipart/form-data with fields (subCountyId, wardId, categoryId, description)
+// and optional files (up to 5) under the 'files' field name.
+router.post(
+  '/grievances',
+  uploadMultiple,
+  validate(submitGrievanceSchema),
+  publicController.submitGrievance
+);
 
 // ─── Track Grievance (Public, no auth) ──────────────────────────────────────
 

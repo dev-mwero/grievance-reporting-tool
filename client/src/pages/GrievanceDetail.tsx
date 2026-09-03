@@ -19,6 +19,7 @@ import {
 } from '../services/staff.service';
 import { listUsers } from '../services/admin.service';
 import { getErrorMessage } from '../lib/api';
+import { sanitizeRichText } from '../lib/utils';
 import { useAuth } from '../contexts/auth-context';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
@@ -217,7 +218,10 @@ export default function GrievanceDetail() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground mb-1">Description</p>
-            <p className="text-sm text-foreground whitespace-pre-wrap">{grievance.description}</p>
+            <div
+              className="prose prose-sm max-w-none text-foreground"
+              dangerouslySetInnerHTML={{ __html: sanitizeRichText(grievance.description) }}
+            />
           </div>
         </CardContent>
       </Card>

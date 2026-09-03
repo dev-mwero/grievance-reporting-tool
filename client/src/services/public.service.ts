@@ -28,6 +28,7 @@ export interface SubmitGrievanceInput {
   wardId: string;
   categoryId: string;
   description: string;
+  files?: File[];
 }
 
 export interface SubmittedGrievance {
@@ -37,6 +38,7 @@ export interface SubmittedGrievance {
   subCountyName: string;
   wardName: string;
   categoryName: string;
+  attachmentCount?: number;
 }
 
 export interface TrackedGrievance {
@@ -78,7 +80,26 @@ export async function getCategories(): Promise<Category[]> {
 export async function submitGrievance(
   input: SubmitGrievanceInput
 ): Promise<SubmittedGrievance> {
-  const { data } = await api.post<ApiResponse<SubmittedGrievance>>('/public/grievances', input);
+  const formData = new FormData();
+  formData.append('subCountyId', input.subCountyId);
+  formData.append('wardId', input.wardId);
+  formData.append('categoryId', input.categoryId);
+  formData.append('description', input.description);
+
+  // Append files (up to 5) under the 'files' field name
+  if (input.files && input.files.length > 0) {
+    input.files.forEach((file) => {
+      formData.append('files', file);
+    });
+  }
+
+  const { data } = await api.post<ApiResponse<SubmittedGrievance>>(
+    '/public/grievances',
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }
+  );
   return data.data!;
 }
 

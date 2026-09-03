@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from './setup';
 import { seedLookupData } from './helpers';
+import { Grievance } from '../src/models/grievance.model';
+import { Attachment } from '../src/models/attachment.model';
 
 describe('Public Grievance API', () => {
   let categoryId: string;
@@ -54,12 +56,10 @@ describe('Public Grievance API', () => {
     it('submits a grievance and returns a reference code', async () => {
       const res = await request(app)
         .post('/api/public/grievances')
-        .send({
-          subCountyId,
-          wardId,
-          categoryId,
-          description: 'The main road has a large pothole that needs urgent repair.',
-        });
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'The main road has a large pothole that needs urgent repair.');
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
@@ -70,12 +70,10 @@ describe('Public Grievance API', () => {
     it('rejects a description that is too short', async () => {
       const res = await request(app)
         .post('/api/public/grievances')
-        .send({
-          subCountyId,
-          wardId,
-          categoryId,
-          description: 'short',
-        });
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'short');
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -84,9 +82,93 @@ describe('Public Grievance API', () => {
     it('rejects missing required fields', async () => {
       const res = await request(app)
         .post('/api/public/grievances')
-        .send({ description: 'A valid description that is long enough.' });
+        .field('description', 'A valid description that is long enough.');
 
       expect(res.status).toBe(400);
+    });
+
+    it('accepts rich text description and sanitizes dangerous HTML', async () => {
+      const res = await request(app)
+        .post('/api/public/grievances')
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field(
+          'description',
+          '<p>The road has a <strong>large pothole</strong> near the market.</p><ul><li>Item one</li><li>Item two</li></ul><script>alert("xss")</script>'
+        );
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+
+      // Verify the stored description is sanitized (script tag removed)
+      const grievance = await Grievance.findOne({ referenceCode: res.body.data.referenceCode });
+      expect(grievance).toBeDefined();
+      expect(grievance!.description).toContain('<strong>large pothole</strong>');
+      expect(grievance!.description).toContain('<ul>');
+      expect(grievance!.description).not.toContain('<script>');
+    });
+
+    it('accepts up to 5 file attachments', async () => {
+      const res = await request(app)
+        .post('/api/public/grievances')
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'A grievance with multiple file attachments for testing purposes.')
+        .attach('files', Buffer.from('test file content 1'), {
+          filename: 'evidence1.txt',
+          contentType: 'text/plain',
+        })
+        .attach('files', Buffer.from('test file content 2'), {
+          filename: 'evidence2.txt',
+          contentType: 'text/plain',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.attachmentCount).toBe(2);
+
+      // Verify attachments were created
+      const grievance = await Grievance.findOne({ referenceCode: res.body.data.referenceCode });
+      expect(grievance).toBeDefined();
+      const attachments = await Attachment.find({ grievanceId: grievance!._id }).sort({ uploadedAt: 1 });
+      expect(attachments.length).toBe(2);
+      expect(attachments[0].originalName).toBe('evidence1.txt');
+      expect(attachments[0].uploadedBy).toBeUndefined(); // anonymous upload
+    });
+
+    it('rejects unsupported file types', async () => {
+      const res = await request(app)
+        .post('/api/public/grievances')
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'A grievance with an unsupported file type for testing.')
+        .attach('files', Buffer.from('not an image'), {
+          filename: 'malware.exe',
+          contentType: 'application/x-msdownload',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('rejects more than 5 files', async () => {
+      const res = await request(app)
+        .post('/api/public/grievances')
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'A grievance with too many file attachments for testing.')
+        .attach('files', Buffer.from('file 1'), { filename: 'f1.txt', contentType: 'text/plain' })
+        .attach('files', Buffer.from('file 2'), { filename: 'f2.txt', contentType: 'text/plain' })
+        .attach('files', Buffer.from('file 3'), { filename: 'f3.txt', contentType: 'text/plain' })
+        .attach('files', Buffer.from('file 4'), { filename: 'f4.txt', contentType: 'text/plain' })
+        .attach('files', Buffer.from('file 5'), { filename: 'f5.txt', contentType: 'text/plain' })
+        .attach('files', Buffer.from('file 6'), { filename: 'f6.txt', contentType: 'text/plain' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
     });
   });
 
@@ -95,12 +177,10 @@ describe('Public Grievance API', () => {
       // Submit a grievance first
       const submitRes = await request(app)
         .post('/api/public/grievances')
-        .send({
-          subCountyId,
-          wardId,
-          categoryId,
-          description: 'Street lights are not working on the main avenue.',
-        });
+        .field('subCountyId', subCountyId)
+        .field('wardId', wardId)
+        .field('categoryId', categoryId)
+        .field('description', 'Street lights are not working on the main avenue.');
       const referenceCode = submitRes.body.data.referenceCode;
 
       const res = await request(app).get(`/api/public/grievances/${referenceCode}`);

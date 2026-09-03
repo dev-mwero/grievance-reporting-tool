@@ -7,7 +7,7 @@ export const submitGrievanceSchema = z.object({
   description: z
     .string()
     .min(10, 'Description must be at least 10 characters')
-    .max(10000, 'Description cannot exceed 10000 characters'),
+    .max(20000, 'Description cannot exceed 20000 characters'),
 });
 
 export type SubmitGrievanceInput = z.infer<typeof submitGrievanceSchema>;

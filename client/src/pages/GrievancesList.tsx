@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/auth-context';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import { getErrorMessage } from '../lib/api';
+import { stripHtml } from '../lib/utils';
 import { Download, FilterX, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
@@ -144,7 +145,7 @@ export default function GrievancesList() {
       g.subCountyName,
       g.wardName,
       g.categoryName,
-      `"${(g.description || '').replace(/"/g, '""')}"`,
+      `"${stripHtml(g.description || '').replace(/"/g, '""')}"`,
       new Date(g.submittedAt).toLocaleString(),
     ]);
 
@@ -347,7 +348,7 @@ export default function GrievancesList() {
                       {g.status.replace(/_/g, ' ')}
                     </Badge>
                   </div>
-                  <p className="text-sm text-foreground line-clamp-2 mb-2">{g.description}</p>
+                  <p className="text-sm text-foreground line-clamp-2 mb-2">{stripHtml(g.description)}</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{g.subCountyName} / {g.wardName}</span>
                     <span>{g.categoryName}</span>
