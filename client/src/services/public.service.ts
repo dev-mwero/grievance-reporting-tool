@@ -60,6 +60,13 @@ export interface TrackedGrievance {
   }>;
 }
 
+export interface PublicStats {
+  totalGrievances: number;
+  resolvedGrievances: number;
+  activeCategories: number;
+  activeSubCounties: number;
+}
+
 export async function getSubCounties(): Promise<SubCounty[]> {
   const { data } = await api.get<ApiResponse<SubCounty[]>>('/public/sub-counties');
   return data.data ?? [];
@@ -75,6 +82,11 @@ export async function getWards(subCountyId: string): Promise<Ward[]> {
 export async function getCategories(): Promise<Category[]> {
   const { data } = await api.get<ApiResponse<Category[]>>('/public/categories');
   return data.data ?? [];
+}
+
+export async function getPublicStats(): Promise<PublicStats> {
+  const { data } = await api.get<ApiResponse<PublicStats>>('/public/stats');
+  return data.data!;
 }
 
 export async function submitGrievance(
