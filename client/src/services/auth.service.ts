@@ -1,5 +1,26 @@
 import { api } from '../lib/api';
 import type { ApiResponse } from 'shared';
+import type { Role } from 'shared';
+
+// ─── Profile ────────────────────────────────────────────────────────────────
+
+export interface UserProfile {
+  _id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: Role;
+  title?: string;
+  department?: string;
+  isActive: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+}
+
+export async function getProfile(): Promise<UserProfile> {
+  const { data } = await api.get<ApiResponse<UserProfile>>('/auth/profile');
+  return data.data!;
+}
 
 // ─── Forgot Password ────────────────────────────────────────────────────────
 

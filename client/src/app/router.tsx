@@ -10,6 +10,7 @@ import AcceptInvitation from '../pages/AcceptInvitation';
 import ForgotPassword from '../pages/ForgotPassword';
 import ResetPassword from '../pages/ResetPassword';
 import ChangePassword from '../pages/ChangePassword';
+import Profile from '../pages/Profile';
 import DashboardOverview from '../pages/DashboardOverview';
 import GrievancesList from '../pages/GrievancesList';
 import GrievanceDetail from '../pages/GrievanceDetail';
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <DashboardOverview /> },
+      { path: 'profile', element: <Profile /> },
       { path: 'grievances', element: <GrievancesList /> },
       { path: 'grievances/:id', element: <GrievanceDetail /> },
       { path: 'change-password', element: <ChangePassword /> },

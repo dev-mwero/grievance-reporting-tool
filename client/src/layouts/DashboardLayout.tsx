@@ -49,6 +49,12 @@ export default function DashboardLayout() {
               Grievances
             </Link>
             <Link
+              to="/dashboard/profile"
+              className="block px-3 py-2 rounded-md text-sm font-medium hover:bg-accent"
+            >
+              My Profile
+            </Link>
+            <Link
               to="/dashboard/change-password"
               className="block px-3 py-2 rounded-md text-sm font-medium hover:bg-accent"
             >
