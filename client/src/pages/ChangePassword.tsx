@@ -5,12 +5,22 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { changePassword } from '../services/auth.service';
 import { getErrorMessage } from '../lib/api';
+import {
+  validateRequired,
+  validatePassword,
+  validateConfirmPassword,
+} from '../lib/validation';
 
 export default function ChangePassword() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    currentPassword?: string;
+    newPassword?: string;
+    confirmPassword?: string;
+  }>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -19,10 +29,16 @@ export default function ChangePassword() {
     setError('');
     setSuccess(false);
 
-    if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      return;
-    }
+    // Client-side validation
+    const currentError = validateRequired(currentPassword, 'Current password');
+    const newError = validatePassword(newPassword);
+    const confirmError = validateConfirmPassword(newPassword, confirmPassword);
+    setFieldErrors({
+      currentPassword: currentError,
+      newPassword: newError,
+      confirmPassword: confirmError,
+    });
+    if (currentError || newError || confirmError) return;
 
     setLoading(true);
     try {
@@ -53,9 +69,15 @@ export default function ChangePassword() {
                 id="currentPassword"
                 type="password"
                 value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  setFieldErrors((f) => ({ ...f, currentPassword: undefined }));
+                }}
                 required
               />
+              {fieldErrors.currentPassword && (
+                <p className="text-xs text-destructive">{fieldErrors.currentPassword}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -64,11 +86,17 @@ export default function ChangePassword() {
                 id="newPassword"
                 type="password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  setFieldErrors((f) => ({ ...f, newPassword: undefined, confirmPassword: undefined }));
+                }}
                 placeholder="At least 8 characters"
                 required
                 minLength={8}
               />
+              {fieldErrors.newPassword && (
+                <p className="text-xs text-destructive">{fieldErrors.newPassword}</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Must contain at least one uppercase letter, one lowercase letter, and one number.
               </p>
@@ -80,10 +108,16 @@ export default function ChangePassword() {
                 id="confirmPassword"
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setFieldErrors((f) => ({ ...f, confirmPassword: undefined }));
+                }}
                 required
                 minLength={8}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="text-xs text-destructive">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
 
             {error && (

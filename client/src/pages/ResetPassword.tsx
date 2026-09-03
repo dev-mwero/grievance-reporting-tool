@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { resetPassword } from '../services/auth.service';
 import { getErrorMessage } from '../lib/api';
+import { validatePassword, validateConfirmPassword } from '../lib/validation';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -15,6 +16,10 @@ export default function ResetPassword() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    password?: string;
+    confirmPassword?: string;
+  }>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -22,10 +27,11 @@ export default function ResetPassword() {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
+    // Client-side validation
+    const passwordError = validatePassword(password);
+    const confirmError = validateConfirmPassword(password, confirmPassword);
+    setFieldErrors({ password: passwordError, confirmPassword: confirmError });
+    if (passwordError || confirmError) return;
 
     setLoading(true);
     try {
@@ -95,11 +101,17 @@ export default function ResetPassword() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((f) => ({ ...f, password: undefined, confirmPassword: undefined }));
+                }}
                 placeholder="At least 8 characters"
                 required
                 minLength={8}
               />
+              {fieldErrors.password && (
+                <p className="text-xs text-destructive">{fieldErrors.password}</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Must contain at least one uppercase letter, one lowercase letter, and one number.
               </p>
@@ -111,10 +123,16 @@ export default function ResetPassword() {
                 id="confirmPassword"
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setFieldErrors((f) => ({ ...f, confirmPassword: undefined }));
+                }}
                 required
                 minLength={8}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="text-xs text-destructive">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
 
             {error && (

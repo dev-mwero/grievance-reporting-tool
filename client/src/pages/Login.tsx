@@ -6,17 +6,25 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useAuth } from '../contexts/auth-context';
 import { getErrorMessage } from '../lib/api';
+import { validateEmail, validateRequired } from '../lib/validation';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const { login, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    const emailError = validateEmail(email);
+    const passwordError = validateRequired(password, 'Password');
+    setFieldErrors({ email: emailError, password: passwordError });
+    if (emailError || passwordError) return;
 
     try {
       await login(email, password);
@@ -41,10 +49,16 @@ export default function Login() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setFieldErrors((f) => ({ ...f, email: undefined }));
+                }}
                 placeholder="you@example.com"
                 required
               />
+              {fieldErrors.email && (
+                <p className="text-xs text-destructive">{fieldErrors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -53,9 +67,15 @@ export default function Login() {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((f) => ({ ...f, password: undefined }));
+                }}
                 required
               />
+              {fieldErrors.password && (
+                <p className="text-xs text-destructive">{fieldErrors.password}</p>
+              )}
             </div>
 
             {error && (

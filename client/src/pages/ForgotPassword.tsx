@@ -6,18 +6,25 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { forgotPassword } from '../services/auth.service';
 import { getErrorMessage } from '../lib/api';
+import { validateEmail } from '../lib/validation';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [fieldError, setFieldError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
+    // Client-side validation
+    const emailError = validateEmail(email);
+    setFieldError(emailError);
+    if (emailError) return;
+
+    setLoading(true);
     try {
       await forgotPassword(email);
       setSubmitted(true);
@@ -67,10 +74,16 @@ export default function ForgotPassword() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setFieldError(undefined);
+                }}
                 placeholder="you@example.com"
                 required
               />
+              {fieldError && (
+                <p className="text-xs text-destructive">{fieldError}</p>
+              )}
             </div>
 
             {error && (

@@ -8,6 +8,7 @@ import { Select } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { getSubCounties, getWards, getCategories, submitGrievance } from '../services/public.service';
 import { getErrorMessage } from '../lib/api';
+import { validateRequired, validateMinLength } from '../lib/validation';
 
 export default function SubmitGrievance() {
   const [subCountyId, setSubCountyId] = useState('');
@@ -15,6 +16,12 @@ export default function SubmitGrievance() {
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{
+    subCountyId?: string;
+    wardId?: string;
+    categoryId?: string;
+    description?: string;
+  }>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ referenceCode: string } | null>(null);
 
@@ -42,6 +49,20 @@ export default function SubmitGrievance() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    const subCountyError = validateRequired(subCountyId, 'Sub-County');
+    const wardError = validateRequired(wardId, 'Ward');
+    const categoryError = validateRequired(categoryId, 'Category');
+    const descriptionError = validateMinLength(description, 10, 'Description');
+    setFieldErrors({
+      subCountyId: subCountyError,
+      wardId: wardError,
+      categoryId: categoryError,
+      description: descriptionError,
+    });
+    if (subCountyError || wardError || categoryError || descriptionError) return;
+
     setSubmitting(true);
 
     try {
@@ -109,7 +130,10 @@ export default function SubmitGrievance() {
               <Select
                 id="subCounty"
                 value={subCountyId}
-                onChange={(e) => setSubCountyId(e.target.value)}
+                onChange={(e) => {
+                  setSubCountyId(e.target.value);
+                  setFieldErrors((f) => ({ ...f, subCountyId: undefined }));
+                }}
                 required
               >
                 <option value="">Select sub-county</option>
@@ -119,6 +143,9 @@ export default function SubmitGrievance() {
                   </option>
                 ))}
               </Select>
+              {fieldErrors.subCountyId && (
+                <p className="text-xs text-destructive">{fieldErrors.subCountyId}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -126,7 +153,10 @@ export default function SubmitGrievance() {
               <Select
                 id="ward"
                 value={wardId}
-                onChange={(e) => setWardId(e.target.value)}
+                onChange={(e) => {
+                  setWardId(e.target.value);
+                  setFieldErrors((f) => ({ ...f, wardId: undefined }));
+                }}
                 required
                 disabled={!subCountyId}
               >
@@ -137,6 +167,9 @@ export default function SubmitGrievance() {
                   </option>
                 ))}
               </Select>
+              {fieldErrors.wardId && (
+                <p className="text-xs text-destructive">{fieldErrors.wardId}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -144,7 +177,10 @@ export default function SubmitGrievance() {
               <Select
                 id="category"
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
+                onChange={(e) => {
+                  setCategoryId(e.target.value);
+                  setFieldErrors((f) => ({ ...f, categoryId: undefined }));
+                }}
                 required
               >
                 <option value="">Select category</option>
@@ -154,6 +190,9 @@ export default function SubmitGrievance() {
                   </option>
                 ))}
               </Select>
+              {fieldErrors.categoryId && (
+                <p className="text-xs text-destructive">{fieldErrors.categoryId}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -161,13 +200,19 @@ export default function SubmitGrievance() {
               <Textarea
                 id="description"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  setFieldErrors((f) => ({ ...f, description: undefined }));
+                }}
                 placeholder="Describe the issue in detail..."
                 required
                 minLength={10}
                 maxLength={10000}
                 rows={6}
               />
+              {fieldErrors.description && (
+                <p className="text-xs text-destructive">{fieldErrors.description}</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 {description.length}/10000 characters
               </p>
