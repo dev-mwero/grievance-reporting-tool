@@ -19,6 +19,7 @@ import {
 } from '../services/staff.service';
 import { listUsers } from '../services/admin.service';
 import { getErrorMessage } from '../lib/api';
+import { useAuth } from '../contexts/auth-context';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
   SUBMITTED: 'info',
@@ -61,6 +62,7 @@ function formatBytes(bytes: number): string {
 
 export default function GrievanceDetail() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [newStatus, setNewStatus] = useState('');
   const [statusNote, setStatusNote] = useState('');
@@ -158,6 +160,7 @@ export default function GrievanceDetail() {
   const { grievance, updates, assignments } = data;
   const allowedTransitions = STATUS_TRANSITIONS[grievance.status] || [];
   const staffList = staffUsers?.data ?? [];
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
 
   const toggleSupporting = (userId: string) => {
     setSupportingAssigneeIds((prev) =>
@@ -213,98 +216,131 @@ export default function GrievanceDetail() {
         </CardContent>
       </Card>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Update Status</CardTitle>
-            <CardDescription>Move the grievance through its lifecycle</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-4 items-end">
-              <div className="space-y-2 flex-1">
-                <Label>New Status</Label>
-                <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-                  <option value="">Select status...</option>
-                  {allowedTransitions.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
+      {isAdmin ? (
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Update Status</CardTitle>
+              <CardDescription>Move the grievance through its lifecycle</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4 items-end">
+                <div className="space-y-2 flex-1">
+                  <Label>New Status</Label>
+                  <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
+                    <option value="">Select status...</option>
+                    {allowedTransitions.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <Button
+                  onClick={() => statusMutation.mutate()}
+                  disabled={!newStatus || statusMutation.isPending}
+                >
+                  {statusMutation.isPending ? 'Updating...' : 'Update Status'}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Label>Status Note (optional)</Label>
+                <Textarea
+                  value={statusNote}
+                  onChange={(e) => setStatusNote(e.target.value)}
+                  placeholder="Add a note about this status change..."
+                  rows={2}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Assign Staff</CardTitle>
+              <CardDescription>Assign a primary and supporting staff to this grievance</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Primary Assignee</Label>
+                <Select
+                  value={primaryAssigneeId}
+                  onChange={(e) => setPrimaryAssigneeId(e.target.value)}
+                >
+                  <option value="">Select primary assignee...</option>
+                  {staffList.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name} ({u.email})
                     </option>
                   ))}
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Supporting Assignees</Label>
+                <div className="space-y-2 max-h-40 overflow-y-auto border rounded-lg p-3">
+                  {staffList.length > 0 ? (
+                    staffList.map((u) => (
+                      <label
+                        key={u._id}
+                        className="flex items-center gap-2 text-sm cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={supportingAssigneeIds.includes(u._id)}
+                          onChange={() => toggleSupporting(u._id)}
+                          disabled={u._id === primaryAssigneeId}
+                        />
+                        <span>
+                          {u.name} ({u.email})
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No staff available.</p>
+                  )}
+                </div>
+              </div>
               <Button
-                onClick={() => statusMutation.mutate()}
-                disabled={!newStatus || statusMutation.isPending}
+                onClick={() => assignMutation.mutate()}
+                disabled={!primaryAssigneeId || assignMutation.isPending}
               >
-                {statusMutation.isPending ? 'Updating...' : 'Update Status'}
+                {assignMutation.isPending ? 'Assigning...' : 'Assign Staff'}
               </Button>
-            </div>
-            <div className="space-y-2">
-              <Label>Status Note (optional)</Label>
-              <Textarea
-                value={statusNote}
-                onChange={(e) => setStatusNote(e.target.value)}
-                placeholder="Add a note about this status change..."
-                rows={2}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Assign Staff</CardTitle>
-            <CardDescription>Assign a primary and supporting staff to this grievance</CardDescription>
+            <CardTitle>Assignment</CardTitle>
+            <CardDescription>Current assignment for this grievance</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Primary Assignee</Label>
-              <Select
-                value={primaryAssigneeId}
-                onChange={(e) => setPrimaryAssigneeId(e.target.value)}
-              >
-                <option value="">Select primary assignee...</option>
-                {staffList.map((u) => (
-                  <option key={u._id} value={u._id}>
-                    {u.name} ({u.email})
-                  </option>
+          <CardContent>
+            {assignments.length > 0 ? (
+              <div className="space-y-2">
+                {assignments.map((a) => (
+                  <div
+                    key={a._id}
+                    className="flex items-center justify-between border rounded-lg p-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-sm font-medium truncate">{a.assigneeName}</span>
+                      {a.isPrimary && (
+                        <Badge variant="info">Primary</Badge>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {new Date(a.assignedAt).toLocaleDateString()}
+                    </span>
+                  </div>
                 ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Supporting Assignees</Label>
-              <div className="space-y-2 max-h-40 overflow-y-auto border rounded-lg p-3">
-                {staffList.length > 0 ? (
-                  staffList.map((u) => (
-                    <label
-                      key={u._id}
-                      className="flex items-center gap-2 text-sm cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={supportingAssigneeIds.includes(u._id)}
-                        onChange={() => toggleSupporting(u._id)}
-                        disabled={u._id === primaryAssigneeId}
-                      />
-                      <span>
-                        {u.name} ({u.email})
-                      </span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No staff available.</p>
-                )}
               </div>
-            </div>
-            <Button
-              onClick={() => assignMutation.mutate()}
-              disabled={!primaryAssigneeId || assignMutation.isPending}
-            >
-              {assignMutation.isPending ? 'Assigning...' : 'Assign Staff'}
-            </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Not yet assigned.</p>
+            )}
           </CardContent>
         </Card>
-      </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -346,21 +382,23 @@ export default function GrievanceDetail() {
           <CardDescription>Upload and manage files for this grievance</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4 items-end">
-            <div className="space-y-2 flex-1">
-              <Label>Upload File</Label>
-              <Input
-                type="file"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-              />
+          {isAdmin && (
+            <div className="flex gap-4 items-end">
+              <div className="space-y-2 flex-1">
+                <Label>Upload File</Label>
+                <Input
+                  type="file"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <Button
+                onClick={() => uploadMutation.mutate()}
+                disabled={!selectedFile || uploadMutation.isPending}
+              >
+                {uploadMutation.isPending ? 'Uploading...' : 'Upload'}
+              </Button>
             </div>
-            <Button
-              onClick={() => uploadMutation.mutate()}
-              disabled={!selectedFile || uploadMutation.isPending}
-            >
-              {uploadMutation.isPending ? 'Uploading...' : 'Upload'}
-            </Button>
-          </div>
+          )}
 
           {attachments?.data && attachments.data.length > 0 ? (
             <div className="space-y-2">
@@ -386,13 +424,15 @@ export default function GrievanceDetail() {
                         View
                       </a>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteAttachmentMutation.mutate(att._id)}
-                    >
-                      Delete
-                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteAttachmentMutation.mutate(att._id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
