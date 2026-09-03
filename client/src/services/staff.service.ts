@@ -66,6 +66,8 @@ export interface ListGrievancesParams {
   wardId?: string;
   categoryId?: string;
   assigneeId?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

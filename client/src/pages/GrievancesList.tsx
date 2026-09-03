@@ -43,6 +43,8 @@ export default function GrievancesList() {
   const [wardId, setWardId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
   const [myAssigned, setMyAssigned] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Lookup data for filters
   const { data: categories } = useQuery({
@@ -77,6 +79,8 @@ export default function GrievancesList() {
       wardId,
       assigneeId,
       myAssigned,
+      dateFrom,
+      dateTo,
     ],
     queryFn: () =>
       listGrievances({
@@ -88,6 +92,8 @@ export default function GrievancesList() {
         subCountyId: subCountyId || undefined,
         wardId: wardId || undefined,
         assigneeId: myAssigned ? user?.id : assigneeId || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
       }),
   });
 
@@ -106,21 +112,72 @@ export default function GrievancesList() {
     setWardId('');
     setAssigneeId('');
     setMyAssigned(false);
+    setDateFrom('');
+    setDateTo('');
     setPage(1);
   };
 
   const hasActiveFilters =
-    status || search || categoryId || subCountyId || wardId || assigneeId || myAssigned;
+    status || search || categoryId || subCountyId || wardId || assigneeId || myAssigned || dateFrom || dateTo;
+
+  // Export current filtered results to CSV
+  const exportCSV = () => {
+    const rows = data?.data ?? [];
+    if (rows.length === 0) return;
+
+    const headers = [
+      'Reference Code',
+      'Status',
+      'Sub-County',
+      'Ward',
+      'Category',
+      'Description',
+      'Submitted At',
+    ];
+    const csvRows = rows.map((g) => [
+      g.referenceCode,
+      g.status,
+      g.subCountyName,
+      g.wardName,
+      g.categoryName,
+      `"${(g.description || '').replace(/"/g, '""')}"`,
+      new Date(g.submittedAt).toLocaleString(),
+    ]);
+
+    const csv = [headers, ...csvRows]
+      .map((row) => row.join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `grievances-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Grievances</h1>
-        {hasActiveFilters && (
-          <Button variant="outline" size="sm" onClick={resetFilters}>
-            Clear Filters
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportCSV}
+            disabled={!data?.data || data.data.length === 0}
+          >
+            Export CSV
           </Button>
-        )}
+          {hasActiveFilters && (
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              Clear Filters
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -229,6 +286,26 @@ export default function GrievancesList() {
                 </option>
               ))}
             </Select>
+
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setPage(1);
+              }}
+              aria-label="From date"
+            />
+
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(1);
+              }}
+              aria-label="To date"
+            />
           </div>
         </CardContent>
       </Card>
