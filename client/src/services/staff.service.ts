@@ -62,6 +62,10 @@ export interface ListGrievancesParams {
   limit?: number;
   status?: string;
   search?: string;
+  subCountyId?: string;
+  wardId?: string;
+  categoryId?: string;
+  assigneeId?: string;
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
