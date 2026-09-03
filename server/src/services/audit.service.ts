@@ -1,0 +1,59 @@
+export enum AuditAction {
+  GRIEVANCE_SUBMITTED = 'GRIEVANCE_SUBMITTED',
+  GRIEVANCE_ACKNOWLEDGED = 'GRIEVANCE_ACKNOWLEDGED',
+  GRIEVANCE_ASSIGNED = 'GRIEVANCE_ASSIGNED',
+  GRIEVANCE_REASSIGNED = 'GRIEVANCE_REASSIGNED',
+  GRIEVANCE_STATUS_CHANGED = 'GRIEVANCE_STATUS_CHANGED',
+  GRIEVANCE_RESOLVED = 'GRIEVANCE_RESOLVED',
+  GRIEVANCE_CLOSED = 'GRIEVANCE_CLOSED',
+  GRIEVANCE_REJECTED = 'GRIEVANCE_REJECTED',
+  PUBLIC_UPDATE_ADDED = 'PUBLIC_UPDATE_ADDED',
+  INTERNAL_NOTE_ADDED = 'INTERNAL_NOTE_ADDED',
+  ATTACHMENT_ADDED = 'ATTACHMENT_ADDED',
+  USER_CREATED = 'USER_CREATED',
+  USER_UPDATED = 'USER_UPDATED',
+  USER_DEACTIVATED = 'USER_DEACTIVATED',
+  INVITATION_SENT = 'INVITATION_SENT',
+  INVITATION_ACCEPTED = 'INVITATION_ACCEPTED',
+  CATEGORY_CREATED = 'CATEGORY_CREATED',
+  CATEGORY_UPDATED = 'CATEGORY_UPDATED',
+  CATEGORY_DEACTIVATED = 'CATEGORY_DEACTIVATED',
+  SUBCOUNTY_CREATED = 'SUBCOUNTY_CREATED',
+  SUBCOUNTY_UPDATED = 'SUBCOUNTY_UPDATED',
+  WARD_CREATED = 'WARD_CREATED',
+  WARD_UPDATED = 'WARD_UPDATED',
+  LOGIN_SUCCESS = 'LOGIN_SUCCESS',
+  LOGIN_FAILED = 'LOGIN_FAILED',
+  PASSWORD_RESET_REQUESTED = 'PASSWORD_RESET_REQUESTED',
+  PASSWORD_RESET_COMPLETED = 'PASSWORD_RESET_COMPLETED',
+}
+
+export enum ActorType {
+  USER = 'USER',
+  SYSTEM = 'SYSTEM',
+  ANONYMOUS = 'ANONYMOUS',
+}
+
+export interface AuditEvent {
+  action: AuditAction;
+  entityType: string;
+  entityId: string;
+  actorId?: string;
+  actorType: ActorType;
+  metadata?: Record<string, unknown>;
+  timestamp: Date;
+}
+
+export interface AuditService {
+  log(event: Omit<AuditEvent, 'timestamp'>): Promise<void>;
+  query(filters: {
+    entityType?: string;
+    entityId?: string;
+    actorId?: string;
+    action?: AuditAction;
+    startDate?: Date;
+    endDate?: Date;
+    page?: number;
+    limit?: number;
+  }): Promise<{ events: AuditEvent[]; total: number }>;
+}
