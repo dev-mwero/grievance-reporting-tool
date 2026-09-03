@@ -98,3 +98,49 @@ export async function addGrievanceUpdate(
 ): Promise<void> {
   await api.post(`/grievances/${id}/updates`, { type, content });
 }
+
+// ─── Assignment ─────────────────────────────────────────────────────────────
+
+export async function assignGrievance(
+  id: string,
+  input: { primaryAssigneeId: string; supportingAssigneeIds?: string[] }
+): Promise<void> {
+  await api.post(`/grievances/${id}/assign`, input);
+}
+
+// ─── Attachments ────────────────────────────────────────────────────────────
+
+export interface Attachment {
+  _id: string;
+  grievanceId: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  storageKey: string;
+  url?: string;
+  uploadedBy?: string;
+  uploadedAt: string;
+}
+
+export async function listAttachments(
+  id: string,
+  params: { page?: number; limit?: number } = {}
+): Promise<PaginatedResponse<Attachment>> {
+  const { data } = await api.get<PaginatedResponse<Attachment>>(`/grievances/${id}/attachments`, {
+    params,
+  });
+  return data;
+}
+
+export async function uploadAttachment(id: string, file: File): Promise<Attachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<ApiResponse<Attachment>>(`/grievances/${id}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data.data!;
+}
+
+export async function deleteAttachment(id: string, attachmentId: string): Promise<void> {
+  await api.delete(`/grievances/${id}/attachments/${attachmentId}`);
+}

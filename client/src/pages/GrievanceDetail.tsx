@@ -7,11 +7,17 @@ import { Button } from '../components/ui/button';
 import { Select } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
+import { Input } from '../components/ui/input';
 import {
   getGrievance,
   updateGrievanceStatus,
   addGrievanceUpdate,
+  assignGrievance,
+  listAttachments,
+  uploadAttachment,
+  deleteAttachment,
 } from '../services/staff.service';
+import { listUsers } from '../services/admin.service';
 import { getErrorMessage } from '../lib/api';
 
 const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'info' | 'destructive'> = {
@@ -47,6 +53,12 @@ function formatDate(date?: string): string {
   });
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function GrievanceDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -56,9 +68,27 @@ export default function GrievanceDetail() {
   const [updateContent, setUpdateContent] = useState('');
   const [error, setError] = useState('');
 
+  // Assignment state
+  const [primaryAssigneeId, setPrimaryAssigneeId] = useState('');
+  const [supportingAssigneeIds, setSupportingAssigneeIds] = useState<string[]>([]);
+
+  // Attachment state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const { data, isLoading } = useQuery({
     queryKey: ['grievance', id],
     queryFn: () => getGrievance(id!),
+    enabled: !!id,
+  });
+
+  const { data: staffUsers } = useQuery({
+    queryKey: ['staff-users'],
+    queryFn: () => listUsers({ limit: 100, isActive: 'true' }),
+  });
+
+  const { data: attachments } = useQuery({
+    queryKey: ['grievance-attachments', id],
+    queryFn: () => listAttachments(id!, { limit: 50 }),
     enabled: !!id,
   });
 
@@ -83,6 +113,40 @@ export default function GrievanceDetail() {
     onError: (err) => setError(getErrorMessage(err)),
   });
 
+  const assignMutation = useMutation({
+    mutationFn: () =>
+      assignGrievance(id!, {
+        primaryAssigneeId,
+        supportingAssigneeIds,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['grievance', id] });
+      setPrimaryAssigneeId('');
+      setSupportingAssigneeIds([]);
+      setError('');
+    },
+    onError: (err) => setError(getErrorMessage(err)),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: () => uploadAttachment(id!, selectedFile!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['grievance-attachments', id] });
+      setSelectedFile(null);
+      setError('');
+    },
+    onError: (err) => setError(getErrorMessage(err)),
+  });
+
+  const deleteAttachmentMutation = useMutation({
+    mutationFn: (attachmentId: string) => deleteAttachment(id!, attachmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['grievance-attachments', id] });
+      setError('');
+    },
+    onError: (err) => setError(getErrorMessage(err)),
+  });
+
   if (isLoading) {
     return <div className="text-center py-12">Loading grievance...</div>;
   }
@@ -93,6 +157,13 @@ export default function GrievanceDetail() {
 
   const { grievance, updates, assignments } = data;
   const allowedTransitions = STATUS_TRANSITIONS[grievance.status] || [];
+  const staffList = staffUsers?.data ?? [];
+
+  const toggleSupporting = (userId: string) => {
+    setSupportingAssigneeIds((prev) =>
+      prev.includes(userId) ? prev.filter((u) => u !== userId) : [...prev, userId]
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -142,42 +213,98 @@ export default function GrievanceDetail() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Update Status</CardTitle>
-          <CardDescription>Move the grievance through its lifecycle</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4 items-end">
-            <div className="space-y-2 flex-1">
-              <Label>New Status</Label>
-              <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-                <option value="">Select status...</option>
-                {allowedTransitions.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace(/_/g, ' ')}
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Update Status</CardTitle>
+            <CardDescription>Move the grievance through its lifecycle</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-4 items-end">
+              <div className="space-y-2 flex-1">
+                <Label>New Status</Label>
+                <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
+                  <option value="">Select status...</option>
+                  {allowedTransitions.map((s) => (
+                    <option key={s} value={s}>
+                      {s.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button
+                onClick={() => statusMutation.mutate()}
+                disabled={!newStatus || statusMutation.isPending}
+              >
+                {statusMutation.isPending ? 'Updating...' : 'Update Status'}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Label>Status Note (optional)</Label>
+              <Textarea
+                value={statusNote}
+                onChange={(e) => setStatusNote(e.target.value)}
+                placeholder="Add a note about this status change..."
+                rows={2}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Assign Staff</CardTitle>
+            <CardDescription>Assign a primary and supporting staff to this grievance</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Primary Assignee</Label>
+              <Select
+                value={primaryAssigneeId}
+                onChange={(e) => setPrimaryAssigneeId(e.target.value)}
+              >
+                <option value="">Select primary assignee...</option>
+                {staffList.map((u) => (
+                  <option key={u._id} value={u._id}>
+                    {u.name} ({u.email})
                   </option>
                 ))}
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Supporting Assignees</Label>
+              <div className="space-y-2 max-h-40 overflow-y-auto border rounded-lg p-3">
+                {staffList.length > 0 ? (
+                  staffList.map((u) => (
+                    <label
+                      key={u._id}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={supportingAssigneeIds.includes(u._id)}
+                        onChange={() => toggleSupporting(u._id)}
+                        disabled={u._id === primaryAssigneeId}
+                      />
+                      <span>
+                        {u.name} ({u.email})
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No staff available.</p>
+                )}
+              </div>
+            </div>
             <Button
-              onClick={() => statusMutation.mutate()}
-              disabled={!newStatus || statusMutation.isPending}
+              onClick={() => assignMutation.mutate()}
+              disabled={!primaryAssigneeId || assignMutation.isPending}
             >
-              {statusMutation.isPending ? 'Updating...' : 'Update Status'}
+              {assignMutation.isPending ? 'Assigning...' : 'Assign Staff'}
             </Button>
-          </div>
-          <div className="space-y-2">
-            <Label>Status Note (optional)</Label>
-            <Textarea
-              value={statusNote}
-              onChange={(e) => setStatusNote(e.target.value)}
-              placeholder="Add a note about this status change..."
-              rows={2}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -210,6 +337,69 @@ export default function GrievanceDetail() {
           >
             {updateMutation.isPending ? 'Adding...' : 'Add Update'}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Attachments</CardTitle>
+          <CardDescription>Upload and manage files for this grievance</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4 items-end">
+            <div className="space-y-2 flex-1">
+              <Label>Upload File</Label>
+              <Input
+                type="file"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <Button
+              onClick={() => uploadMutation.mutate()}
+              disabled={!selectedFile || uploadMutation.isPending}
+            >
+              {uploadMutation.isPending ? 'Uploading...' : 'Upload'}
+            </Button>
+          </div>
+
+          {attachments?.data && attachments.data.length > 0 ? (
+            <div className="space-y-2">
+              {attachments.data.map((att) => (
+                <div
+                  key={att._id}
+                  className="flex items-center justify-between border rounded-lg p-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-sm font-medium truncate">{att.originalName}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {formatBytes(att.size)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {att.url && (
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        View
+                      </a>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => deleteAttachmentMutation.mutate(att._id)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No attachments yet.</p>
+          )}
         </CardContent>
       </Card>
 
