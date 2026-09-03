@@ -50,6 +50,12 @@ export interface TrackedGrievance {
   acknowledgedAt?: string;
   resolvedAt?: string;
   closedAt?: string;
+  updates?: Array<{
+    _id: string;
+    content: string;
+    authorName: string;
+    createdAt: string;
+  }>;
 }
 
 export async function getSubCounties(): Promise<SubCounty[]> {

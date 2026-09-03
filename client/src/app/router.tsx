@@ -6,6 +6,7 @@ import Home from '../pages/Home';
 import SubmitGrievance from '../pages/SubmitGrievance';
 import TrackGrievance from '../pages/TrackGrievance';
 import Login from '../pages/Login';
+import AcceptInvitation from '../pages/AcceptInvitation';
 import DashboardOverview from '../pages/DashboardOverview';
 import GrievancesList from '../pages/GrievancesList';
 import GrievanceDetail from '../pages/GrievanceDetail';
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />,
+  },
+  {
+    path: '/accept-invitation',
+    element: <AcceptInvitation />,
   },
   {
     path: '/dashboard',

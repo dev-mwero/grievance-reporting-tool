@@ -2,6 +2,7 @@ import { SubCounty } from '../../models/sub-county.model';
 import { Ward } from '../../models/ward.model';
 import { GrievanceCategory } from '../../models/grievance-category.model';
 import { Grievance } from '../../models/grievance.model';
+import { GrievanceUpdate } from '../../models/grievance-update.model';
 import { ApiError } from '../../utils/api-error';
 import { logGrievanceEvent } from '../../services/audit-impl';
 import { AuditAction } from '../../services/audit.service';
@@ -92,6 +93,14 @@ export async function trackByReferenceCode(referenceCode: string) {
     throw ApiError.notFound('Grievance not found');
   }
 
+  // Fetch public updates only (internal notes are never exposed to the public)
+  const publicUpdates = await GrievanceUpdate.find({
+    grievanceId: grievance._id,
+    type: 'PUBLIC_UPDATE',
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+
   // Return limited information to the public
   return {
     referenceCode: grievance.referenceCode,
@@ -104,5 +113,11 @@ export async function trackByReferenceCode(referenceCode: string) {
     acknowledgedAt: grievance.acknowledgedAt,
     resolvedAt: grievance.resolvedAt,
     closedAt: grievance.closedAt,
+    updates: publicUpdates.map((u) => ({
+      _id: u._id,
+      content: u.content,
+      authorName: u.authorName,
+      createdAt: u.createdAt,
+    })),
   };
 }

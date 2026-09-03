@@ -134,6 +134,25 @@ export default function TrackGrievance() {
                 <p className="font-medium">{formatDate(result.closedAt)}</p>
               </div>
             </div>
+
+            {result.updates && result.updates.length > 0 && (
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium mb-3">Updates</p>
+                <div className="space-y-3">
+                  {result.updates.map((u) => (
+                    <div key={u._id} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium">{u.authorName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(u.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{u.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
