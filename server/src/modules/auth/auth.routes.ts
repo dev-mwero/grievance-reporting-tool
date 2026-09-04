@@ -8,6 +8,7 @@ import {
   resetPasswordSchema,
   acceptInvitationSchema,
   changePasswordSchema,
+  updateProfileSchema,
 } from './auth.validation';
 import * as authController from './auth.controller';
 
@@ -38,6 +39,9 @@ router.post(
 
 // GET /api/auth/profile
 router.get('/profile', authenticate, authController.getProfile);
+
+// PATCH /api/auth/profile
+router.patch('/profile', authenticate, validate(updateProfileSchema), authController.updateProfile);
 
 // POST /api/auth/change-password
 router.post(

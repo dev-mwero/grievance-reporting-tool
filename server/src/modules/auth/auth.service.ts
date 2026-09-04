@@ -21,6 +21,7 @@ import type {
   ResetPasswordInput,
   AcceptInvitationInput,
   CreateInvitationInput,
+  UpdateProfileInput,
 } from './auth.validation';
 
 const SALT_ROUNDS = 12;
@@ -291,6 +292,26 @@ export async function getProfile(userId: string) {
   if (!user) {
     throw ApiError.notFound('User not found');
   }
+  return user;
+}
+
+// ─── Update Profile (Self) ──────────────────────────────────────────────────
+
+export async function updateProfile(userId: string, input: UpdateProfileInput) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw ApiError.notFound('User not found');
+  }
+
+  if (input.name !== undefined) user.name = input.name;
+  if (input.phone !== undefined) user.phone = input.phone ?? undefined;
+  if (input.title !== undefined) user.title = input.title ?? undefined;
+  if (input.department !== undefined) user.department = input.department ?? undefined;
+
+  await user.save();
+
+  await logUserEvent(AuditAction.PROFILE_UPDATED, user._id.toString());
+
   return user;
 }
 

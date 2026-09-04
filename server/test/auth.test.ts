@@ -130,6 +130,67 @@ describe('Auth API', () => {
     });
   });
 
+  describe('PATCH /api/auth/profile', () => {
+    it('updates the current user personal details', async () => {
+      const user = await createUser({
+        email: 'updateprofile@test.com',
+        name: 'Original Name',
+      });
+      const token = await loginAndGetToken(user);
+
+      const res = await request(app)
+        .patch('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: 'Updated Name',
+          phone: '+254712345678',
+          title: 'Manager',
+          department: 'Operations',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.name).toBe('Updated Name');
+      expect(res.body.data.phone).toBe('+254712345678');
+      expect(res.body.data.title).toBe('Manager');
+      expect(res.body.data.department).toBe('Operations');
+    });
+
+    it('rejects updates to role, email, and isActive', async () => {
+      const user = await createUser({ email: 'updateprofile-role@test.com' });
+      const token = await loginAndGetToken(user);
+
+      const res = await request(app)
+        .patch('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          role: Role.SUPER_ADMIN,
+          email: 'hacked@test.com',
+          isActive: false,
+          name: 'Still Works',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.role).toBe(Role.STAFF);
+      expect(res.body.data.email).toBe('updateprofile-role@test.com');
+      expect(res.body.data.isActive).toBe(true);
+      expect(res.body.data.name).toBe('Still Works');
+    });
+
+    it('rejects invalid name (empty)', async () => {
+      const user = await createUser({ email: 'updateprofile-empty@test.com' });
+      const token = await loginAndGetToken(user);
+
+      const res = await request(app)
+        .patch('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: '   ' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+  });
+
   describe('POST /api/auth/refresh', () => {
     it('refreshes the access token', async () => {
       const user = await createUser({ email: 'refresh@test.com' });
