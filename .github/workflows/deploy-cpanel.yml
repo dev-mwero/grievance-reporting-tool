@@ -1,0 +1,83 @@
+name: Deploy to cPanel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build bundle
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: dist
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build cPanel bundle
+        run: npm run build:cpanel
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpanel-bundle
+          path: dist/
+
+  deploy:
+    name: Upload & restart (cPanel)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    env:
+      CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+      CPANEL_USERNAME: ${{ secrets.CPANEL_USERNAME }}
+      CPANEL_SSH_KEY: ${{ secrets.CPANEL_SSH_KEY }}
+      CPANEL_DEPLOY_PATH: ${{ secrets.CPANEL_DEPLOY_PATH }}
+    steps:
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cpanel-bundle
+          path: dist/
+
+      - name: Package bundle
+        run: tar -czf bundle.tar.gz -C dist .
+
+      - name: Upload archive to cPanel
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.CPANEL_HOST }}
+          username: ${{ env.CPANEL_USERNAME }}
+          key: ${{ env.CPANEL_SSH_KEY }}
+          port: 22
+          source: 'bundle.tar.gz'
+          target: ${{ env.CPANEL_DEPLOY_PATH }}
+
+      - name: Extract, install and restart on cPanel
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.CPANEL_HOST }}
+          username: ${{ env.CPANEL_USERNAME }}
+          key: ${{ env.CPANEL_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd "${{ env.CPANEL_DEPLOY_PATH }}"
+            tar -xzf bundle.tar.gz
+            rm -f bundle.tar.gz
+            npm install --omit=dev --no-audit --no-fund
+            # Restart the Node.js application.
+            # cPanel Node apps restart automatically on file change; if not,
+            # uncomment the line below or restart via "Setup Node.js App".
+            # touch tmp/restart.txt
+            echo "Deploy complete at $(date -u)"

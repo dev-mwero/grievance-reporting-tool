@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { env } from './config/env';
+import { clientPublicDir, hasClientBuild } from './config/static';
 import { errorHandler } from './middleware/error-handler';
 import { notFound } from './middleware/not-found';
 import { requestLogger } from './middleware/request-logger';
@@ -64,6 +65,25 @@ app.use('/api/admin/categories', categoriesRoutes);
 app.use('/api/admin', locationsRoutes);
 app.use('/api/admin/analytics', analyticsRoutes);
 app.use('/api/notifications', notificationRoutes);
+
+// ─── Client (Production bundle) ─────────────────────────────────────────────
+
+// In production, Express serves the built React client from the cPanel bundle.
+// This must come after all /api routes and the /uploads static mount so API
+// 404 responses remain JSON and uploaded files are not intercepted.
+if (env.NODE_ENV === 'production' && hasClientBuild()) {
+  app.use(express.static(clientPublicDir));
+
+  // SPA fallback: serve index.html for any non-API, non-upload GET that did
+  // not match a static file. Keeping this after /api and /uploads mounts
+  // ensures API 404s stay JSON and attachments are not intercepted.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
+    if (req.path.startsWith('/api')) return next();
+    if (req.path.startsWith('/uploads')) return next();
+    res.sendFile(path.join(clientPublicDir, 'index.html'));
+  });
+}
 
 // 404 handler
 app.use(notFound);

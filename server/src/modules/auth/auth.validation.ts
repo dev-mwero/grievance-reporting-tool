@@ -110,6 +110,31 @@ export const changePasswordSchema = z.object({
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
+// ─── Update Profile (Self) ──────────────────────────────────────────────────
+
+export const updateProfileSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .max(200)
+    .optional(),
+  phone: z
+    .string()
+    .max(20)
+    .optional(),
+  title: z
+    .string()
+    .max(200)
+    .optional(),
+  department: z
+    .string()
+    .max(200)
+    .optional(),
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
 // ─── Create Invitation (Admin) ──────────────────────────────────────────────
 
 export const createInvitationSchema = z.object({

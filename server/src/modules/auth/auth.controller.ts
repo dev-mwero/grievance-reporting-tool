@@ -5,6 +5,7 @@ import type {
   ForgotPasswordInput,
   ResetPasswordInput,
   AcceptInvitationInput,
+  UpdateProfileInput,
 } from './auth.validation';
 
 export async function login(req: Request, res: Response): Promise<void> {
@@ -65,6 +66,17 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
 
   res.json({
     success: true,
+    data: user,
+  });
+}
+
+export async function updateProfile(req: Request, res: Response): Promise<void> {
+  const input = req.validated as unknown as UpdateProfileInput;
+  const user = await authService.updateProfile(req.user!.userId, input);
+
+  res.json({
+    success: true,
+    message: 'Profile updated successfully',
     data: user,
   });
 }

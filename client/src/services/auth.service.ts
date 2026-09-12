@@ -22,6 +22,18 @@ export async function getProfile(): Promise<UserProfile> {
   return data.data!;
 }
 
+export interface UpdateProfileInput {
+  name?: string;
+  phone?: string;
+  title?: string;
+  department?: string;
+}
+
+export async function updateProfile(input: UpdateProfileInput): Promise<UserProfile> {
+  const { data } = await api.patch<ApiResponse<UserProfile>>('/auth/profile', input);
+  return data.data!;
+}
+
 // ─── Forgot Password ────────────────────────────────────────────────────────
 
 export async function forgotPassword(email: string): Promise<string> {
