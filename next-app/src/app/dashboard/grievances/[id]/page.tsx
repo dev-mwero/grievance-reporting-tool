@@ -21,7 +21,8 @@ import {
   StatusBadge,
   Textarea,
 } from "@/components/ui";
-import { ApiClientError, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiClientError, apiGet, apiPatch, apiPost, queryFn } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { canTransition, GrievanceStatus } from "@/types";
 
@@ -59,6 +60,8 @@ export default function GrievanceDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
 
   const [newUpdate, setNewUpdate] = useState("");
   const [updateType, setUpdateType] = useState<
@@ -78,6 +81,32 @@ export default function GrievanceDetailPage() {
       return result;
     },
     enabled: Boolean(id),
+  });
+
+  const [assigneeId, setAssigneeId] = useState("");
+  const staff = useQuery<{
+    users: Array<{ _id: string; name: string; email: string }>;
+  }>({
+    queryKey: ["/admin/users", { limit: 100 }],
+    queryFn,
+    enabled: isAdmin,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (primaryAssigneeId: string) =>
+      apiPost(`/grievances/${id}/assign`, {
+        primaryAssigneeId,
+        supportingAssigneeIds: [],
+      }),
+    onSuccess: () => {
+      setAssigneeId("");
+      queryClient.invalidateQueries({ queryKey: ["/grievances", id] });
+      queryClient.invalidateQueries({ queryKey: ["/grievances/dashboard"] });
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiClientError ? err.message : "Failed to assign.",
+      ),
   });
 
   const addUpdateMutation = useMutation({
@@ -249,6 +278,47 @@ export default function GrievanceDetailPage() {
         </div>
 
         <div className="space-y-6">
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" /> Assignment
+                </CardTitle>
+                <CardDescription>
+                  Currently assigned to{" "}
+                  <span className="font-medium text-foreground">
+                    {g.primaryAssigneeId?.name ?? "no one"}
+                  </span>
+                  .
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label htmlFor="assign-staff">Assign to staff member</Label>
+                  <Select
+                    id="assign-staff"
+                    value={assigneeId}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                  >
+                    <option value="">Select staff…</option>
+                    {staff.data?.users.map((u) => (
+                      <option key={u._id} value={u._id}>
+                        {u.name} — {u.email}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => assignMutation.mutate(assigneeId)}
+                  disabled={!assigneeId || assignMutation.isPending}
+                >
+                  {assignMutation.isPending ? "Assigning…" : "Assign grievance"}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Actions</CardTitle>
