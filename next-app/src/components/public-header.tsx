@@ -28,11 +28,11 @@ export function PublicHeader() {
     <header className="sticky top-0 z-40 border-b bg-card/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            GR
+          <span className="flex h-9 w-10 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+            GriPo
           </span>
           <span className="text-lg font-semibold text-primary">
-            Civics<span className="text-accent">Line</span>
+            Grievance Portal
           </span>
         </Link>
 
