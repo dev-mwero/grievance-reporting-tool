@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { bootstrapSystemAdmin } from "./bootstrap";
 import { env } from "./env";
 
 interface MongooseCache {
@@ -36,5 +37,9 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
 
   globalWithCache.mongooseCache.conn =
     await globalWithCache.mongooseCache.promise;
+
+  // Ensures the initial system admin exists exactly once across all lambdas.
+  await bootstrapSystemAdmin();
+
   return globalWithCache.mongooseCache.conn;
 }

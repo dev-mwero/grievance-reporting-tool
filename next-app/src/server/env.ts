@@ -25,6 +25,9 @@ const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().default("no-reply@grievance.local"),
+  // Bootstrap system admin (created only when no SUPER_ADMIN exists yet)
+  ADMIN_EMAIL: z.string().trim().toLowerCase().optional(),
+  ADMIN_PASSWORD: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
