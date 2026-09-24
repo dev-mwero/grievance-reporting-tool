@@ -38,7 +38,12 @@ export function AcceptInvitationView({ token }: { token: string }) {
     setError(null);
     setLoading(true);
     try {
-      await apiPost("/auth/accept-invitation", { token, name, password });
+      await apiPost("/auth/accept-invitation", {
+        token,
+        name,
+        password,
+        confirmPassword: confirm,
+      });
       router.replace("/login?invited=1");
     } catch (err) {
       setError(
@@ -95,7 +100,7 @@ export function AcceptInvitationView({ token }: { token: string }) {
         <CardHeader>
           <CardTitle>Set up your account</CardTitle>
           <CardDescription>
-            This invitation is valid for 24 hours.
+            This invitation is valid for 7 days.
           </CardDescription>
         </CardHeader>
         <CardContent>

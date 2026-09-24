@@ -9,6 +9,6 @@ export async function GET(req: NextRequest) {
     await requireAuth();
     const query = validate(listGrievancesQuerySchema, readQuery(req));
     const { grievances, pagination } = await listGrievances(query);
-    return paginated(grievances, pagination);
+    return paginated(grievances, pagination, "grievances");
   });
 }

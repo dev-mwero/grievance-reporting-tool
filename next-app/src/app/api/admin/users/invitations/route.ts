@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const query = validate(listInvitationsQuerySchema, readQuery(req));
     const { invitations, pagination } = await listInvitations(query);
-    return paginated(invitations, pagination);
+    return paginated(invitations, pagination, "invitations");
   });
 }
 

@@ -36,6 +36,7 @@ export default function ChangePasswordPage() {
       await apiPost("/auth/change-password", {
         currentPassword,
         newPassword,
+        confirmPassword: confirm,
       });
       setMessage("Password changed successfully.");
       setCurrentPassword("");

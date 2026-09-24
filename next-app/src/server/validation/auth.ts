@@ -53,6 +53,7 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export const acceptInvitationSchema = z
   .object({
     token: z.string().min(1, "Token is required"),
+    name: z.string().trim().min(1, "Name is required").max(200).optional(),
     password: passwordField,
     confirmPassword: z.string().min(1, "Password confirmation is required"),
   })

@@ -33,7 +33,11 @@ export function ResetPasswordView({ token }: { token: string }) {
     setError(null);
     setLoading(true);
     try {
-      await apiPost("/auth/reset-password", { token, password });
+      await apiPost("/auth/reset-password", {
+        token,
+        password,
+        confirmPassword: confirm,
+      });
       setDone(true);
       setTimeout(() => router.replace("/login"), 2500);
     } catch (err) {

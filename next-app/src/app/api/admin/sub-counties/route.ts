@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const query = validate(listSubCountiesQuerySchema, readQuery(req));
     const { subCounties, pagination } = await listSubCounties(query);
-    return paginated(subCounties, pagination);
+    return paginated(subCounties, pagination, "subCounties");
   });
 }
 

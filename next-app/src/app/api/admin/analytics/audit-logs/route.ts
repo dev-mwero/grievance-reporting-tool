@@ -10,6 +10,6 @@ export async function GET(req: NextRequest) {
     await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const query = validate(auditLogsQuerySchema, readQuery(req));
     const { logs, pagination } = await getAuditLogs(query);
-    return paginated(logs, pagination);
+    return paginated(logs, pagination, "logs");
   });
 }

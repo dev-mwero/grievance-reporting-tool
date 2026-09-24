@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const query = validate(listWardsQuerySchema, readQuery(req));
     const { wards, pagination } = await listWards(query);
-    return paginated(wards, pagination);
+    return paginated(wards, pagination, "wards");
   });
 }
 

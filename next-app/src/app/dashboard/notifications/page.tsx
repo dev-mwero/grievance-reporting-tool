@@ -12,7 +12,7 @@ interface NotificationItem {
   type: string;
   title: string;
   message: string;
-  read: boolean;
+  isRead: boolean;
   createdAt: string;
   grievanceId?: string;
   referenceCode?: string;
@@ -41,7 +41,7 @@ export default function NotificationsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-        {notifications.some((n) => !n.read) && (
+        {notifications.some((n) => !n.isRead) && (
           <Button
             variant="outline"
             size="sm"
@@ -67,14 +67,14 @@ export default function NotificationsPage() {
           {notifications.map((n) => (
             <Card
               key={n._id}
-              className={`card-hover ${n.read ? "opacity-70" : "border-primary/40"}`}
+              className={`card-hover ${n.isRead ? "opacity-70" : "border-primary/40"}`}
             >
               <CardContent className="flex items-start justify-between gap-4 p-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span
                       className={`h-2 w-2 shrink-0 rounded-full ${
-                        n.read ? "bg-muted-foreground/40" : "bg-primary"
+                        n.isRead ? "bg-muted-foreground/40" : "bg-primary"
                       }`}
                     />
                     <p className="text-sm font-semibold">{n.title}</p>

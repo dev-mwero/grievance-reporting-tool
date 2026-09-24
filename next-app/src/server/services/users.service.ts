@@ -242,8 +242,18 @@ export async function listInvitations(query: {
     Invitation.countDocuments(filter),
   ]);
 
+  const now = Date.now();
+
   return {
-    invitations,
+    invitations: invitations.map((invitation) => {
+      const doc = invitation.toObject();
+      const accepted = Boolean(doc.acceptedAt);
+      const expired = !accepted && doc.expiresAt.getTime() <= now;
+      return {
+        ...doc,
+        status: accepted ? "accepted" : expired ? "expired" : "pending",
+      };
+    }),
     pagination: {
       page,
       limit,

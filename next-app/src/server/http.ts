@@ -34,13 +34,13 @@ export function created<T>(data: T, message: string) {
 export function paginated<T>(
   data: T[],
   pagination: PaginationMeta,
+  rowKey = "results",
   message?: string,
 ) {
   return NextResponse.json({
     success: true,
     ...(message ? { message } : {}),
-    data,
-    pagination,
+    data: { [rowKey]: data, pagination },
   });
 }
 

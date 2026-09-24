@@ -14,6 +14,6 @@ export async function GET(req: NextRequest) {
       query.limit,
       query.unreadOnly === "true",
     );
-    return paginated(data, pagination);
+    return paginated(data, pagination, "notifications");
   });
 }
