@@ -22,10 +22,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   return handle(async () => {
-    await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+    const viewer = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const { id } = await params;
     const body = validate(updateUserSchema, await req.json().catch(() => ({})));
-    const user = await updateUser(id, body);
+    const user = await updateUser(id, body, viewer.role as Role);
     return ok(user, 200);
   });
 }

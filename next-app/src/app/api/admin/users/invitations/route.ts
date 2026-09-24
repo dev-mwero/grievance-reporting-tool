@@ -13,9 +13,12 @@ import { Role } from "@/types";
 
 export async function GET(req: NextRequest) {
   return handle(async () => {
-    await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+    const viewer = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const query = validate(listInvitationsQuerySchema, readQuery(req));
-    const { invitations, pagination } = await listInvitations(query);
+    const { invitations, pagination } = await listInvitations(
+      query,
+      viewer.role as Role,
+    );
     return paginated(invitations, pagination, "invitations");
   });
 }
@@ -27,7 +30,7 @@ export async function POST(req: NextRequest) {
       createInvitationSchema,
       await req.json().catch(() => ({})),
     );
-    const result = await createInvitation(body, user.userId);
+    const result = await createInvitation(body, user.userId, user.role as Role);
     return ok(result, 201);
   });
 }

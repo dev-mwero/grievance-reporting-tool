@@ -23,6 +23,7 @@ import {
   formatApiErrors,
   queryFn,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { Role } from "@/types";
 
 interface UserRow {
@@ -44,6 +45,7 @@ interface Paginated<T> {
 const roles = Object.values(Role);
 
 export default function AdminUsersPage() {
+  const viewer = useAuth().user;
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,11 +167,17 @@ export default function AdminUsersPage() {
                     setForm({ ...form, role: e.target.value as Role })
                   }
                 >
-                  {roles.map((r) => (
-                    <option key={r} value={r}>
-                      {r.replace("_", " ")}
-                    </option>
-                  ))}
+                  {roles
+                    .filter(
+                      (r) =>
+                        r !== Role.SUPER_ADMIN ||
+                        viewer?.role === Role.SUPER_ADMIN,
+                    )
+                    .map((r) => (
+                      <option key={r} value={r}>
+                        {r.replace("_", " ")}
+                      </option>
+                    ))}
                 </Select>
               </div>
               <div>
@@ -258,11 +266,17 @@ export default function AdminUsersPage() {
                         }
                         className="h-8 w-36"
                       >
-                        {roles.map((r) => (
-                          <option key={r} value={r}>
-                            {r.replace("_", " ")}
-                          </option>
-                        ))}
+                        {roles
+                          .filter(
+                            (r) =>
+                              r !== Role.SUPER_ADMIN ||
+                              viewer?.role === Role.SUPER_ADMIN,
+                          )
+                          .map((r) => (
+                            <option key={r} value={r}>
+                              {r.replace("_", " ")}
+                            </option>
+                          ))}
                       </Select>
                     </td>
                     <td className="px-4 py-3">

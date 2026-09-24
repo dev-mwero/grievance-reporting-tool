@@ -22,6 +22,7 @@ import {
   formatApiErrors,
   queryFn,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/utils";
 import { Role } from "@/types";
 
@@ -44,6 +45,7 @@ const statusColor: Record<string, string> = {
 };
 
 export default function AdminInvitationsPage() {
+  const viewer = useAuth().user;
   const queryClient = useQueryClient();
   const [status, setStatus] = useState("");
   const [open, setOpen] = useState(false);
@@ -53,8 +55,6 @@ export default function AdminInvitationsPage() {
     email: "",
     name: "",
     role: Role.STAFF,
-    phone: "",
-    title: "",
   });
 
   const { data, isLoading } = useQuery<{
@@ -76,7 +76,7 @@ export default function AdminInvitationsPage() {
     mutationFn: () => apiPost("/admin/users/invitations", form),
     onSuccess: () => {
       setOpen(false);
-      setForm({ email: "", name: "", role: Role.STAFF, phone: "", title: "" });
+      setForm({ email: "", name: "", role: Role.STAFF });
       setMessage("Invitation sent.");
       invalidate();
     },
@@ -157,26 +157,18 @@ export default function AdminInvitationsPage() {
                     setForm({ ...form, role: e.target.value as Role })
                   }
                 >
-                  {roles.map((r) => (
-                    <option key={r} value={r}>
-                      {r.replace("_", " ")}
-                    </option>
-                  ))}
+                  {roles
+                    .filter(
+                      (r) =>
+                        r !== Role.SUPER_ADMIN ||
+                        viewer?.role === Role.SUPER_ADMIN,
+                    )
+                    .map((r) => (
+                      <option key={r} value={r}>
+                        {r.replace("_", " ")}
+                      </option>
+                    ))}
                 </Select>
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Title (role)</Label>
-                <Input
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                />
               </div>
               <div className="flex items-end gap-2">
                 <Button type="submit" disabled={create.isPending}>

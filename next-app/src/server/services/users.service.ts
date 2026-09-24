@@ -12,13 +12,16 @@ const SALT_ROUNDS = 12;
 
 // ─── List Users ─────────────────────────────────────────────────────────────
 
-export async function listUsers(query: {
-  page: number;
-  limit: number;
-  search?: string;
-  role?: string;
-  isActive?: string;
-}) {
+export async function listUsers(
+  query: {
+    page: number;
+    limit: number;
+    search?: string;
+    role?: string;
+    isActive?: string;
+  },
+  viewerRole?: Role,
+) {
   const { page, limit, search, role, isActive } = query;
 
   const filter: Record<string, unknown> = {};
@@ -31,6 +34,11 @@ export async function listUsers(query: {
   }
 
   if (role) filter.role = role;
+
+  // System admins are only visible to other system admins.
+  if (viewerRole !== Role.SUPER_ADMIN) {
+    filter.role = { $ne: Role.SUPER_ADMIN };
+  }
 
   if (isActive) filter.isActive = isActive === "true";
 
@@ -65,15 +73,24 @@ export async function getUserById(userId: string) {
 
 // ─── Create User (Admin) ────────────────────────────────────────────────────
 
-export async function createUser(input: {
-  name: string;
-  email: string;
-  phone?: string;
-  role: Role;
-  title?: string;
-  department?: string;
-  password: string;
-}) {
+export async function createUser(
+  input: {
+    name: string;
+    email: string;
+    phone?: string;
+    role: Role;
+    title?: string;
+    department?: string;
+    password: string;
+  },
+  viewerRole?: Role,
+) {
+  if (input.role === Role.SUPER_ADMIN && viewerRole !== Role.SUPER_ADMIN) {
+    throw ApiError.forbidden(
+      "Only system admins can create other system admins",
+    );
+  }
+
   const existingUser = await User.findOne({ email: input.email.toLowerCase() });
   if (existingUser) {
     throw ApiError.conflict("A user with this email already exists");
@@ -104,10 +121,23 @@ export async function createUser(input: {
 export async function updateUser(
   userId: string,
   input: Record<string, unknown>,
+  operatorRole?: Role,
 ) {
   const user = await User.findById(userId);
   if (!user) {
     throw ApiError.notFound("User not found");
+  }
+
+  if (user.role === Role.SUPER_ADMIN && operatorRole !== Role.SUPER_ADMIN) {
+    throw ApiError.forbidden(
+      "Only system admins can modify system admin accounts",
+    );
+  }
+
+  if (input.role === Role.SUPER_ADMIN && operatorRole !== Role.SUPER_ADMIN) {
+    throw ApiError.forbidden(
+      "Only system admins can promote a user to system admin",
+    );
   }
 
   if (input.isActive === false && user.role === Role.SUPER_ADMIN) {
@@ -180,7 +210,14 @@ export async function createInvitation(
     role: Role;
   },
   invitedByUserId: string,
+  viewerRole?: Role,
 ) {
+  if (input.role === Role.SUPER_ADMIN && viewerRole !== Role.SUPER_ADMIN) {
+    throw ApiError.forbidden(
+      "Only system admins can invite other system admins",
+    );
+  }
+
   const existingUser = await User.findOne({ email: input.email.toLowerCase() });
   if (existingUser) {
     throw ApiError.conflict("A user with this email already exists");
@@ -214,11 +251,14 @@ export async function createInvitation(
 
 // ─── List Invitations ───────────────────────────────────────────────────────
 
-export async function listInvitations(query: {
-  page: number;
-  limit: number;
-  status?: "pending" | "accepted" | "expired";
-}) {
+export async function listInvitations(
+  query: {
+    page: number;
+    limit: number;
+    status?: "pending" | "accepted" | "expired";
+  },
+  viewerRole?: Role,
+) {
   const { page, limit, status } = query;
 
   const filter: Record<string, unknown> = {};
@@ -231,6 +271,11 @@ export async function listInvitations(query: {
   } else if (status === "expired") {
     filter.acceptedAt = { $exists: false };
     filter.expiresAt = { $lte: new Date() };
+  }
+
+  // System admin invitations are only visible to other system admins.
+  if (viewerRole !== Role.SUPER_ADMIN) {
+    filter.role = { $ne: Role.SUPER_ADMIN };
   }
 
   const [invitations, total] = await Promise.all([

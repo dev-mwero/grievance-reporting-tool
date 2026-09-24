@@ -21,6 +21,8 @@ import { ApiClientError, apiPost } from "@/lib/api";
 export function AcceptInvitationView({ token }: { token: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [title, setTitle] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,8 @@ export function AcceptInvitationView({ token }: { token: string }) {
       await apiPost("/auth/accept-invitation", {
         token,
         name,
+        phone: phone.trim() || undefined,
+        title: title.trim() || undefined,
         password,
         confirmPassword: confirm,
       });
@@ -116,6 +120,33 @@ export function AcceptInvitationView({ token }: { token: string }) {
                 placeholder="Jane Omollo"
                 autoComplete="name"
                 required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="phone">
+                Phone <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+254 7xx xxx xxx"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="title">
+                Title <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Input
+                id="title"
+                autoComplete="organization-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Human Resources Officer"
               />
             </div>
 

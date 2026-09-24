@@ -182,6 +182,8 @@ export async function resetPassword(input: {
 export async function acceptInvitation(input: {
   token: string;
   name?: string;
+  phone?: string;
+  title?: string;
   password: string;
 }) {
   const hashedToken = hashToken(input.token);
@@ -209,8 +211,8 @@ export async function acceptInvitation(input: {
   const user = await User.create({
     name: input.name?.trim() || invitation.name,
     email: invitation.email,
-    phone: invitation.phone,
-    title: invitation.title,
+    phone: input.phone ?? invitation.phone,
+    title: input.title ?? invitation.title,
     role: invitation.role,
     passwordHash,
     isActive: true,

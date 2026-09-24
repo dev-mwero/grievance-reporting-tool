@@ -10,18 +10,18 @@ import { Role } from "@/types";
 
 export async function GET(req: NextRequest) {
   return handle(async () => {
-    await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+    const viewer = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const query = validate(listUsersQuerySchema, readQuery(req));
-    const { users, pagination } = await listUsers(query);
+    const { users, pagination } = await listUsers(query, viewer.role as Role);
     return paginated(users, pagination, "users");
   });
 }
 
 export async function POST(req: NextRequest) {
   return handle(async () => {
-    await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+    const viewer = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
     const body = validate(createUserSchema, await req.json().catch(() => ({})));
-    const user = await createUser(body);
+    const user = await createUser(body, viewer.role as Role);
     return ok(user, 201);
   });
 }
