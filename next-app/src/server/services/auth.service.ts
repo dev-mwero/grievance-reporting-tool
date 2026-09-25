@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import type { Role } from "@/types";
+import { ROLE_HIERARCHY, type Role } from "@/types";
 import { ApiError } from "../api-error";
 import { sendInvitationEmail, sendPasswordResetEmail } from "../email";
 import { Invitation } from "../models/invitation.model";
@@ -89,6 +89,15 @@ export async function login(input: { email: string; password: string }) {
   return { user: publicUser(user), accessToken, refreshToken };
 }
 
+// ─── Role Helpers ────────────────────────────────────────────────────────────
+
+/** Roles at or below `realRole` that it may switch into (stays in place, or previews a lower role). */
+export function previewableRoles(realRole: Role): Role[] {
+  return (Object.keys(ROLE_HIERARCHY) as Role[]).filter(
+    (r) => ROLE_HIERARCHY[r] <= ROLE_HIERARCHY[realRole],
+  );
+}
+
 // ─── Refresh Token ──────────────────────────────────────────────────────────
 
 export async function refreshAccessToken(refreshToken: string) {
@@ -106,10 +115,54 @@ export async function refreshAccessToken(refreshToken: string) {
   const accessToken = generateAccessToken({
     userId: user._id.toString(),
     email: user.email,
-    role: user.role,
+    role: (user.previewRole ?? user.role) as Role,
   });
 
   return { accessToken };
+}
+
+// ─── Switch Role (Preview) ──────────────────────────────────────────────────
+
+export async function switchRole(userId: string, targetRole: Role) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  const realRole = user.role as Role;
+  const previousPreview = user.previewRole ?? undefined;
+
+  if (!previewableRoles(realRole).includes(targetRole)) {
+    throw ApiError.forbidden("You cannot switch to that role");
+  }
+
+  const exiting = targetRole === realRole;
+  user.previewRole = exiting ? undefined : targetRole;
+  await user.save();
+
+  const accessToken = generateAccessToken({
+    userId: user._id.toString(),
+    email: user.email,
+    role: targetRole,
+  });
+
+  await logUserEvent(
+    exiting
+      ? AuditAction.ROLE_PREVIEW_EXITED
+      : AuditAction.ROLE_PREVIEW_ENTERED,
+    user._id.toString(),
+    user._id.toString(),
+    user.name,
+    { from: previousPreview ?? realRole, to: targetRole },
+  );
+
+  return {
+    user: {
+      ...publicUser({ ...user.toObject(), role: targetRole }),
+      previewRole: exiting ? undefined : targetRole,
+    },
+    accessToken,
+  };
 }
 
 // ─── Forgot Password ────────────────────────────────────────────────────────

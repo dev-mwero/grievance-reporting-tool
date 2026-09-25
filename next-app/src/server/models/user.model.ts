@@ -6,6 +6,7 @@ export interface IUser extends Document {
   email: string;
   phone?: string;
   role: Role;
+  previewRole?: Role;
   title?: string;
   department?: string;
   isActive: boolean;
@@ -41,6 +42,10 @@ const userSchema = new Schema<IUser>(
       enum: Object.values(Role),
       required: [true, "Role is required"],
       default: Role.STAFF,
+    },
+    previewRole: {
+      type: String,
+      enum: Object.values(Role),
     },
     title: {
       type: String,

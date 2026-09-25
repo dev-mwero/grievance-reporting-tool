@@ -113,14 +113,15 @@ export async function getSession(): Promise<AuthUser | null> {
   try {
     await connectToDatabase();
     const user = await User.findById(payload.userId)
-      .select("name email role title isActive")
+      .select("name email role title isActive previewRole")
       .lean();
     if (!user || user.isActive === false) return null;
     return {
       id: String(user._id),
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: (user.previewRole ?? user.role) as Role,
+      previewRole: user.previewRole ? (user.previewRole as Role) : undefined,
       title: user.title,
     };
   } catch {

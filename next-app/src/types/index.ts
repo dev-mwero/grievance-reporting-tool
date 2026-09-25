@@ -93,5 +93,6 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
+  previewRole?: Role;
   title?: string;
 }

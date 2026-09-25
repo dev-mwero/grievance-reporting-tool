@@ -12,6 +12,12 @@ export const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
+export const switchRoleSchema = z.object({
+  role: z.nativeEnum(Role),
+});
+
+export type SwitchRoleInput = z.infer<typeof switchRoleSchema>;
+
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
 });

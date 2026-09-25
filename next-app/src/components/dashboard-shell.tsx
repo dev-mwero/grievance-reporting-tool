@@ -205,6 +205,19 @@ export function DashboardShell({
           </div>
         </header>
 
+        {user.previewRole && (
+          <div className="border-b bg-primary/10 px-4 py-2 text-center text-xs font-medium text-primary lg:px-6">
+            Previewing as {user.previewRole.replace("_", " ")} — admin links are
+            hidden.{" "}
+            <Link
+              href="/dashboard/profile"
+              className="underline underline-offset-2"
+            >
+              Exit preview
+            </Link>
+          </div>
+        )}
+
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>
     </div>
