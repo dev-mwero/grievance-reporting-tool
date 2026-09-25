@@ -11,7 +11,9 @@ import { logGrievanceEvent } from "./audit-impl";
 // ─── Lookup Data (Public) ───────────────────────────────────────────────────
 
 export async function getActiveSubCounties() {
-  return SubCounty.find({ isActive: true }).sort({ name: 1 });
+  return SubCounty.find({ isActive: true })
+    .collation({ locale: "en", strength: 2 })
+    .sort({ name: 1 });
 }
 
 export async function getActiveWardsBySubCounty(subCountyId: string) {
@@ -20,7 +22,9 @@ export async function getActiveWardsBySubCounty(subCountyId: string) {
     throw ApiError.notFound("Sub-County not found");
   }
 
-  return Ward.find({ subCountyId, isActive: true }).sort({ name: 1 });
+  return Ward.find({ subCountyId, isActive: true })
+    .collation({ locale: "en", strength: 2 })
+    .sort({ name: 1 });
 }
 
 export async function getActiveCategories() {

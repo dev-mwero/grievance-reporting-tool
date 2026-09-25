@@ -27,6 +27,7 @@ export async function listSubCounties(query: {
 
   const [subCounties, total] = await Promise.all([
     SubCounty.find(filter)
+      .collation({ locale: "en", strength: 2 })
       .sort({ name: 1 })
       .skip((page - 1) * limit)
       .limit(limit),
@@ -139,6 +140,7 @@ export async function listWards(query: {
   const [wards, total] = await Promise.all([
     Ward.find(filter)
       .populate("subCountyId", "name code")
+      .collation({ locale: "en", strength: 2 })
       .sort({ name: 1 })
       .skip((page - 1) * limit)
       .limit(limit),
