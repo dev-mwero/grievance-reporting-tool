@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const listSubCountiesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(1000).default(20),
   search: z.string().max(200).optional(),
   isActive: z.enum(["true", "false"]).optional(),
 });
@@ -26,7 +26,7 @@ export type UpdateSubCountyInput = z.infer<typeof updateSubCountySchema>;
 
 export const listWardsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(1000).default(20),
   search: z.string().max(200).optional(),
   subCountyId: z.string().optional(),
   isActive: z.enum(["true", "false"]).optional(),
