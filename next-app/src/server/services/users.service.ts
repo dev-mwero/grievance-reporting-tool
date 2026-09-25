@@ -42,12 +42,15 @@ export async function listUsers(
 
   if (isActive) filter.isActive = isActive === "true";
 
+  const countFilter = { ...filter };
+  if (!countFilter.role) countFilter.role = { $ne: Role.SUPER_ADMIN };
+
   const [users, total] = await Promise.all([
     User.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit),
-    User.countDocuments(filter),
+    User.countDocuments(countFilter),
   ]);
 
   return {

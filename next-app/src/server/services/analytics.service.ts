@@ -1,4 +1,4 @@
-import { GrievanceStatus } from "@/types";
+import { GrievanceStatus, Role } from "@/types";
 import { AuditLog } from "../models/audit-log.model";
 import { Grievance } from "../models/grievance.model";
 import { GrievanceCategory } from "../models/grievance-category.model";
@@ -36,8 +36,11 @@ export async function getOverview(query: AnalyticsQuery) {
     Grievance.countDocuments({ ...dateFilter, status: "CLOSED" }),
     Grievance.countDocuments({ ...dateFilter, status: "REJECTED" }),
     getAvgResolutionDays(dateFilter),
-    User.countDocuments(),
-    User.countDocuments({ isActive: true }),
+    User.countDocuments({ role: { $ne: Role.SUPER_ADMIN } }),
+    User.countDocuments({
+      role: { $ne: Role.SUPER_ADMIN },
+      isActive: true,
+    }),
     GrievanceCategory.countDocuments({ isActive: true }),
     SubCounty.countDocuments({ isActive: true }),
   ]);
