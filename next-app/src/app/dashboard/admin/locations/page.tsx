@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power } from "lucide-react";
+import { Pencil, Plus, Power } from "lucide-react";
 import { useState } from "react";
 import {
   Alert,
@@ -82,7 +82,9 @@ function SubCountiesPanel({
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", code: "" });
+  const [editForm, setEditForm] = useState({ name: "", code: "" });
 
   const { data, isLoading } = useQuery<{ subCounties: SubCountyRow[] }>({
     queryKey: ["/admin/sub-counties", { limit: 200, isActive: "true" }],
@@ -105,6 +107,17 @@ function SubCountiesPanel({
     onSuccess: () => {
       setOpen(false);
       setForm({ name: "", code: "" });
+      invalidate();
+    },
+    onError: showErr,
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: typeof editForm }) =>
+      apiPatch(`/admin/sub-counties/${id}`, body),
+    onSuccess: () => {
+      setEditId(null);
+      setEditForm({ name: "", code: "" });
       invalidate();
     },
     onError: showErr,
@@ -184,9 +197,31 @@ function SubCountiesPanel({
                 <tbody className="divide-y">
                   {rows.map((s) => (
                     <tr key={s._id} className="hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{s.name}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {editId === s._id ? (
+                          <Input
+                            value={editForm.name}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, name: e.target.value })
+                            }
+                            className="w-44"
+                          />
+                        ) : (
+                          s.name
+                        )}
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {s.code}
+                        {editId === s._id ? (
+                          <Input
+                            value={editForm.code}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, code: e.target.value })
+                            }
+                            className="w-24"
+                          />
+                        ) : (
+                          s.code
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -196,17 +231,53 @@ function SubCountiesPanel({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            toggle.mutate({ id: s._id, isActive: s.isActive })
-                          }
-                        >
-                          <Power
-                            className={`h-4 w-4 ${s.isActive ? "text-destructive" : "text-emerald-600"}`}
-                          />
-                        </Button>
+                        {editId === s._id ? (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                update.mutate({ id: s._id, body: editForm })
+                              }
+                              disabled={update.isPending}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditId(s._id);
+                                setEditForm({ name: s.name, code: s.code });
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                toggle.mutate({
+                                  id: s._id,
+                                  isActive: s.isActive,
+                                })
+                              }
+                            >
+                              <Power
+                                className={`h-4 w-4 ${s.isActive ? "text-destructive" : "text-emerald-600"}`}
+                              />
+                            </Button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -236,7 +307,13 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [subCountyId, setSubCountyId] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", code: "", subCountyId: "" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    code: "",
+    subCountyId: "",
+  });
 
   const subCounties = useQuery<{ subCounties: SubCountyRow[] }>({
     queryKey: ["/admin/sub-counties", { limit: 200, isActive: "true" }],
@@ -279,6 +356,17 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
         ? apiPost(`/admin/wards/${id}/deactivate`)
         : apiPatch(`/admin/wards/${id}`, { isActive: true }),
     onSuccess: invalidate,
+    onError: showErr,
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: typeof editForm }) =>
+      apiPatch(`/admin/wards/${id}`, body),
+    onSuccess: () => {
+      setEditId(null);
+      setEditForm({ name: "", code: "", subCountyId: "" });
+      invalidate();
+    },
     onError: showErr,
   });
 
@@ -379,12 +467,54 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
                 <tbody className="divide-y">
                   {rows.map((w) => (
                     <tr key={w._id} className="hover:bg-muted/30">
-                      <td className="px-4 py-3 font-medium">{w.name}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {editId === w._id ? (
+                          <Input
+                            value={editForm.name}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, name: e.target.value })
+                            }
+                            className="w-44"
+                          />
+                        ) : (
+                          w.name
+                        )}
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {w.code}
+                        {editId === w._id ? (
+                          <Input
+                            value={editForm.code}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, code: e.target.value })
+                            }
+                            className="w-24"
+                          />
+                        ) : (
+                          w.code
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {w.subCountyId?.name ?? "—"}
+                        {editId === w._id ? (
+                          <Select
+                            value={editForm.subCountyId}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                subCountyId: e.target.value,
+                              })
+                            }
+                            className="w-48"
+                          >
+                            <option value="">Select…</option>
+                            {options.map((s) => (
+                              <option key={s._id} value={s._id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </Select>
+                        ) : (
+                          (w.subCountyId?.name ?? "—")
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -394,17 +524,57 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            toggle.mutate({ id: w._id, isActive: w.isActive })
-                          }
-                        >
-                          <Power
-                            className={`h-4 w-4 ${w.isActive ? "text-destructive" : "text-emerald-600"}`}
-                          />
-                        </Button>
+                        {editId === w._id ? (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                update.mutate({ id: w._id, body: editForm })
+                              }
+                              disabled={update.isPending}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditId(w._id);
+                                setEditForm({
+                                  name: w.name,
+                                  code: w.code,
+                                  subCountyId: w.subCountyId?._id ?? "",
+                                });
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                toggle.mutate({
+                                  id: w._id,
+                                  isActive: w.isActive,
+                                })
+                              }
+                            >
+                              <Power
+                                className={`h-4 w-4 ${w.isActive ? "text-destructive" : "text-emerald-600"}`}
+                              />
+                            </Button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
