@@ -120,6 +120,16 @@ describe("sendGrievanceAssignedEmail", () => {
 });
 
 describe("email delivery is non-fatal", () => {
+  it("returns false instead of throwing when the transport rejects", async () => {
+    const { sendGrievanceSubmittedEmail } = await loadEmailModule("smtp.test");
+    transportSendMock.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    await expect(
+      sendGrievanceSubmittedEmail("admin@gov.go.ke", ctx),
+    ).resolves.toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
   it("returns false and logs when SMTP is not configured", async () => {
     const { sendGrievanceAssignedEmail } = await loadEmailModule("");
 

@@ -26,20 +26,30 @@ interface MailInput {
 }
 
 /**
- * Send an email. Returns false when SMTP is not configured so callers can
- * fall back to logging the action link (development behaviour).
+ * Send an email. Returns false when SMTP is not configured, or when the send
+ * fails, so callers can fall back to logging. A mail transport error must
+ * never propagate: these fire on paths that have already committed their
+ * side effects, and a 500 would misreport the outcome.
  */
 async function sendMail(input: MailInput): Promise<boolean> {
   const t = getTransporter();
   if (!t) return false;
-  await t.sendMail({
-    from: env.EMAIL_FROM,
-    to: input.to,
-    subject: input.subject,
-    text: input.text,
-    html: input.html,
-  });
-  return true;
+  try {
+    await t.sendMail({
+      from: env.EMAIL_FROM,
+      to: input.to,
+      subject: input.subject,
+      text: input.text,
+      html: input.html,
+    });
+    return true;
+  } catch (err) {
+    console.error(
+      `[EMAIL] Failed to send "${input.subject}" to ${input.to}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return false;
+  }
 }
 
 /** Escape a value for interpolation into the HTML body. */
