@@ -249,6 +249,14 @@ export async function createInvitation(
 
   await sendInvitationEmail(invitation.email, invitation.name, rawToken);
 
+  await logUserEvent(
+    AuditAction.INVITATION_SENT,
+    invitation._id.toString(),
+    invitedByUserId,
+    undefined,
+    { email: invitation.email, role: invitation.role },
+  );
+
   return invitation;
 }
 
