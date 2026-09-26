@@ -1,6 +1,7 @@
 import mongoose, { type Document, Schema } from "mongoose";
 
 export type NotificationType =
+  | "GRIEVANCE_SUBMITTED"
   | "GRIEVANCE_ASSIGNED"
   | "GRIEVANCE_STATUS_CHANGED"
   | "GRIEVANCE_UPDATE"
@@ -29,6 +30,7 @@ const notificationSchema = new Schema<INotification>(
     type: {
       type: String,
       enum: [
+        "GRIEVANCE_SUBMITTED",
         "GRIEVANCE_ASSIGNED",
         "GRIEVANCE_STATUS_CHANGED",
         "GRIEVANCE_UPDATE",
