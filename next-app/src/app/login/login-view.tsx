@@ -18,7 +18,7 @@ import {
 import { ApiClientError, formatApiErrors } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
-export function LoginView({ invited }: { invited: boolean }) {
+export function LoginView() {
   const { signIn, isAuthenticated } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -66,11 +66,6 @@ export function LoginView({ invited }: { invited: boolean }) {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {invited && (
-              <Alert variant="success">
-                Your account is ready. Sign in to get started.
-              </Alert>
-            )}
             {error && <Alert variant="error">{error}</Alert>}
 
             <div>

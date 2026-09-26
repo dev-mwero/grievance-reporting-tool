@@ -3,11 +3,6 @@ import { LoginView } from "./login-view";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ invited?: string }>;
-}) {
-  const { invited } = await searchParams;
-  return <LoginView invited={invited === "1"} />;
+export default function LoginPage() {
+  return <LoginView />;
 }
