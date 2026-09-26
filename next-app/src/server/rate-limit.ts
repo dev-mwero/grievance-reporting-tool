@@ -37,19 +37,8 @@ export interface RateLimitOptions {
   global?: boolean;
 }
 
-/**
- * Fixed-window MongoDB-backed rate limiter, suitable for serverless
- * deployments where in-memory counters do not work. Uses a per-IP+scope key,
- * or a single shared key when `global` is set.
- */
-export async function checkRateLimit(
-  req: NextRequest,
-  scope: string,
-  options: RateLimitOptions,
-): Promise<void> {
-  await connectToDatabase();
-  const ip = clientIp(req);
-  const key = options.global ? `${scope}:global` : `${scope}:${ip}`;
+/** Increment a windowed counter, throwing once it is exhausted. */
+async function consume(key: string, options: RateLimitOptions): Promise<void> {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + options.windowSeconds * 1000);
 
@@ -74,4 +63,34 @@ export async function checkRateLimit(
   }
 
   await RateLimit.updateOne({ key }, { $inc: { count: 1 } });
+}
+
+/**
+ * Fixed-window MongoDB-backed rate limiter, suitable for serverless
+ * deployments where in-memory counters do not work. Uses a per-IP+scope key,
+ * or a single shared key when `global` is set.
+ */
+export async function checkRateLimit(
+  req: NextRequest,
+  scope: string,
+  options: RateLimitOptions,
+): Promise<void> {
+  await connectToDatabase();
+  const ip = clientIp(req);
+  await consume(options.global ? `${scope}:global` : `${scope}:${ip}`, options);
+}
+
+/**
+ * Rate limit by an arbitrary caller-supplied key rather than by IP, for
+ * threats a per-IP limit cannot see — chiefly credential stuffing spread
+ * across many addresses against one account. The key is lowercased so
+ * `Jane@Gov.go.ke` and `jane@gov.go.ke` cannot hold separate budgets.
+ */
+export async function checkRateLimitByKey(
+  key: string,
+  scope: string,
+  options: RateLimitOptions,
+): Promise<void> {
+  await connectToDatabase();
+  await consume(`${scope}:${key.toLowerCase()}`, options);
 }

@@ -27,7 +27,7 @@ vi.mock("@/server/db", () => ({
   connectToDatabase: connectMock.mockResolvedValue(undefined),
 }));
 
-import { checkRateLimit } from "@/server/rate-limit";
+import { checkRateLimit, checkRateLimitByKey } from "@/server/rate-limit";
 
 function makeReq(ip: string) {
   return { headers: new Headers({ "x-forwarded-for": ip }) } as never;
@@ -113,5 +113,52 @@ describe("checkRateLimit", () => {
       }),
     ).resolves.toBeUndefined();
     expect(updateOneMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("checkRateLimitByKey", () => {
+  beforeEach(() => {
+    findOneMock.mockReset().mockResolvedValue(null);
+    updateOneMock.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("gives each key its own budget", async () => {
+    await checkRateLimitByKey("a@gov.go.ke", "acct", {
+      windowSeconds: 60,
+      max: 1,
+    });
+    await checkRateLimitByKey("b@gov.go.ke", "acct", {
+      windowSeconds: 60,
+      max: 1,
+    });
+
+    expect(keysUsed()).toEqual(["acct:a@gov.go.ke", "acct:b@gov.go.ke"]);
+  });
+
+  it("lowercases the key so casing cannot buy extra attempts", async () => {
+    await checkRateLimitByKey("Jane@Gov.go.KE", "acct", {
+      windowSeconds: 60,
+      max: 1,
+    });
+    await checkRateLimitByKey("jane@gov.go.ke", "acct", {
+      windowSeconds: 60,
+      max: 1,
+    });
+
+    expect(keysUsed()).toEqual(["acct:jane@gov.go.ke", "acct:jane@gov.go.ke"]);
+  });
+
+  it("rejects once that key's budget is spent", async () => {
+    findOneMock.mockResolvedValue({
+      count: 10,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await expect(
+      checkRateLimitByKey("a@gov.go.ke", "acct", {
+        windowSeconds: 900,
+        max: 10,
+      }),
+    ).rejects.toThrow(/Too many attempts/);
   });
 });
