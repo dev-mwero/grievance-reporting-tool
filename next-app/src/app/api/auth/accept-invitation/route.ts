@@ -16,9 +16,13 @@ import { acceptInvitationSchema } from "@/server/validation/auth";
  */
 export async function GET(req: NextRequest) {
   return handle(async () => {
+    // Generous because this runs on every render of the accept form, and
+    // invitees at one office share a single NAT address. The 256-bit token is
+    // what prevents enumeration; this ceiling only exists to bound abuse, so
+    // it must not be the thing that blocks a legitimate onboarding batch.
     await checkRateLimit(req, "accept-invitation-lookup", {
       windowSeconds: 900,
-      max: 30,
+      max: 120,
     });
     const token = req.nextUrl.searchParams.get("token") ?? "";
     if (!token) {
@@ -30,9 +34,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   return handle(async () => {
+    // Sized for a shared office IP onboarding a batch of staff at once.
+    // Account creation is still gated by the unguessable token, and by the
+    // duplicate-email check, so this is not a brute-force control.
     await checkRateLimit(req, "accept-invitation", {
       windowSeconds: 900,
-      max: 5,
+      max: 25,
     });
     const body = validate(
       acceptInvitationSchema,
