@@ -1,8 +1,12 @@
+import { after } from "next/server";
+import { Role } from "@/types";
 import { ApiError } from "../api-error";
+import { sendGrievanceSubmittedEmail } from "../email";
 import { Grievance } from "../models/grievance.model";
 import { GrievanceCategory } from "../models/grievance-category.model";
 import { GrievanceUpdate } from "../models/grievance-update.model";
 import { SubCounty } from "../models/sub-county.model";
+import { User } from "../models/user.model";
 import { Ward } from "../models/ward.model";
 import { sanitizeRichText } from "../sanitize";
 import { AuditAction } from "./audit.service";
@@ -103,6 +107,8 @@ export async function submitGrievance(input: {
     { referenceCode: grievance.referenceCode },
   );
 
+  await notifyAdminsOfSubmission(grievance._id.toString(), grievance);
+
   return {
     referenceCode: grievance.referenceCode,
     submittedAt: grievance.submittedAt,
@@ -111,6 +117,38 @@ export async function submitGrievance(input: {
     wardName: grievance.wardName,
     categoryName: grievance.categoryName,
   };
+}
+
+/**
+ * Email every active administrator when a grievance lands, so triage does not
+ * depend on someone opening the dashboard. Deferred with `after()` to keep
+ * SMTP latency off the public submission response.
+ */
+async function notifyAdminsOfSubmission(
+  grievanceId: string,
+  grievance: {
+    referenceCode: string;
+    categoryName: string;
+    subCountyName: string;
+    wardName: string;
+  },
+) {
+  const admins = await User.find({
+    role: { $in: [Role.ADMIN, Role.SUPER_ADMIN] },
+    isActive: true,
+  })
+    .select("email")
+    .lean();
+
+  if (admins.length === 0) return;
+
+  const ctx = { grievanceId, ...grievance };
+
+  after(async () => {
+    for (const admin of admins) {
+      await sendGrievanceSubmittedEmail(admin.email, ctx);
+    }
+  });
 }
 
 // ─── Track Grievance by Reference Code ──────────────────────────────────────

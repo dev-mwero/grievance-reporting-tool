@@ -42,6 +42,16 @@ async function sendMail(input: MailInput): Promise<boolean> {
   return true;
 }
 
+/** Escape a value for interpolation into the HTML body. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function layout(
   title: string,
   body: string,
@@ -91,13 +101,92 @@ export async function sendInvitationEmail(
     subject: "You have been invited",
     text: `Accept your invitation using this link: ${url}`,
     html: layout(
-      `Welcome, ${name}`,
+      `Welcome, ${escapeHtml(name)}`,
       "<p>You have been invited to join the Grievance Management System. This link expires in 7 days.</p>",
       { label: "Accept invitation", url },
     ),
   });
   if (!sent) {
     console.log(`[INVITATION] Token for ${email}: ${rawToken}`);
+  }
+  return sent;
+}
+
+// ─── Grievance notifications ────────────────────────────────────────────────
+
+/**
+ * The fields every grievance email needs. Deliberately excludes
+ * `description`: it is user-supplied rich text and has no place in an
+ * outbound email body.
+ */
+export interface GrievanceEmailContext {
+  grievanceId: string;
+  referenceCode: string;
+  categoryName: string;
+  subCountyName: string;
+  wardName: string;
+}
+
+function grievanceUrl(grievanceId: string) {
+  return `${env.APP_URL}/dashboard/grievances/${grievanceId}`;
+}
+
+function locationLine(ctx: GrievanceEmailContext) {
+  return `${ctx.wardName}, ${ctx.subCountyName}`;
+}
+
+/** Sent to administrators when a member of the public submits a grievance. */
+export async function sendGrievanceSubmittedEmail(
+  email: string,
+  ctx: GrievanceEmailContext,
+) {
+  const url = grievanceUrl(ctx.grievanceId);
+  const sent = await sendMail({
+    to: email,
+    subject: `New grievance submitted: ${ctx.referenceCode}`,
+    text: `A new grievance ${ctx.referenceCode} was submitted under ${ctx.categoryName} in ${locationLine(ctx)}. Review it here: ${url}`,
+    html: layout(
+      `New grievance: ${ctx.referenceCode}`,
+      `<p>A new grievance has been submitted and is awaiting triage.</p>
+       <p><strong>Category:</strong> ${escapeHtml(ctx.categoryName)}<br />
+       <strong>Location:</strong> ${escapeHtml(locationLine(ctx))}</p>`,
+      { label: "Review grievance", url },
+    ),
+  });
+  if (!sent) {
+    console.log(
+      `[GRIEVANCE SUBMITTED] ${ctx.referenceCode} -> notification to ${email} (link: ${url})`,
+    );
+  }
+  return sent;
+}
+
+/** Sent to an officer when a grievance is assigned to them. */
+export async function sendGrievanceAssignedEmail(
+  email: string,
+  ctx: GrievanceEmailContext & { assignedByName: string; isPrimary: boolean },
+) {
+  const url = grievanceUrl(ctx.grievanceId);
+  const assignment = ctx.isPrimary
+    ? "You are the primary assignee"
+    : "You are a supporting assignee";
+  const sent = await sendMail({
+    to: email,
+    subject: `Grievance ${ctx.referenceCode} assigned to you`,
+    text: `${ctx.assignedByName} assigned grievance ${ctx.referenceCode} to you. ${assignment}. Open it here: ${url}`,
+    html: layout(
+      `Grievance ${ctx.referenceCode} assigned to you`,
+      `<p>${escapeHtml(ctx.assignedByName)} has assigned this grievance to you — ${assignment.toLowerCase()}.</p>
+       <p><strong>Category:</strong> ${escapeHtml(ctx.categoryName)}<br />
+       <strong>Location:</strong> ${escapeHtml(locationLine(ctx))}<br />
+       <strong>Status:</strong> ASSIGNED</p>`,
+      { label: "Open grievance", url },
+    ),
+  });
+  if (!sent) {
+    console.log(
+      `[GRIEVANCE ASSIGNED] ${ctx.referenceCode} -> notification to ${email} (link: ${url})`,
+    );
   }
   return sent;
 }

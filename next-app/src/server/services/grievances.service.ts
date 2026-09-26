@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
+import { after } from "next/server";
 import { canTransition, type GrievanceStatus } from "@/types";
 import { ApiError } from "../api-error";
+import { sendGrievanceAssignedEmail } from "../email";
 import { Grievance } from "../models/grievance.model";
 import { GrievanceAssignment } from "../models/grievance-assignment.model";
 import { GrievanceUpdate, UpdateType } from "../models/grievance-update.model";
@@ -210,13 +212,12 @@ export async function assignGrievance(
     throw ApiError.badRequest("Primary assignee not found");
   }
 
-  if (input.supportingAssigneeIds.length > 0) {
-    const supportingUsers = await User.find({
-      _id: { $in: input.supportingAssigneeIds },
-    });
-    if (supportingUsers.length !== input.supportingAssigneeIds.length) {
-      throw ApiError.badRequest("One or more supporting assignees not found");
-    }
+  const supportingUsers =
+    input.supportingAssigneeIds.length > 0
+      ? await User.find({ _id: { $in: input.supportingAssigneeIds } })
+      : [];
+  if (supportingUsers.length !== input.supportingAssigneeIds.length) {
+    throw ApiError.badRequest("One or more supporting assignees not found");
   }
 
   await GrievanceAssignment.updateMany(
@@ -234,19 +235,16 @@ export async function assignGrievance(
     assignedAt: new Date(),
   });
 
-  for (const supportId of input.supportingAssigneeIds) {
-    const supportUser = await User.findById(supportId);
-    if (supportUser) {
-      await GrievanceAssignment.create({
-        grievanceId,
-        assigneeId: supportId,
-        assigneeName: supportUser.name,
-        assignedBy: assignedById,
-        assignedByName,
-        isPrimary: false,
-        assignedAt: new Date(),
-      });
-    }
+  for (const supportUser of supportingUsers) {
+    await GrievanceAssignment.create({
+      grievanceId,
+      assigneeId: supportUser._id.toString(),
+      assigneeName: supportUser.name,
+      assignedBy: assignedById,
+      assignedByName,
+      isPrimary: false,
+      assignedAt: new Date(),
+    });
   }
 
   grievance.primaryAssigneeId = new mongoose.Types.ObjectId(
@@ -298,6 +296,34 @@ export async function assignGrievance(
       referenceCode: grievance.referenceCode,
     })),
   );
+
+  const emailCtx = {
+    grievanceId: grievance._id.toString(),
+    referenceCode: grievance.referenceCode,
+    categoryName: grievance.categoryName,
+    subCountyName: grievance.subCountyName,
+    wardName: grievance.wardName,
+    assignedByName,
+  };
+
+  const recipients: Array<{ email: string; isPrimary: boolean }> = [
+    { email: primaryUser.email, isPrimary: true },
+  ];
+  for (const supportUser of supportingUsers) {
+    if (supportUser.email !== primaryUser.email) {
+      recipients.push({ email: supportUser.email, isPrimary: false });
+    }
+  }
+
+  // Deferred so SMTP latency does not hold up the admin's assign action.
+  after(async () => {
+    for (const recipient of recipients) {
+      await sendGrievanceAssignedEmail(recipient.email, {
+        ...emailCtx,
+        isPrimary: recipient.isPrimary,
+      });
+    }
+  });
 
   return grievance;
 }
