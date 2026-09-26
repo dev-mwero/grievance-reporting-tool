@@ -28,11 +28,19 @@ const RateLimit =
 export interface RateLimitOptions {
   windowSeconds: number;
   max: number;
+  /**
+   * When true the limit applies across every client rather than per-IP. Use
+   * to bound work whose cost scales with the server, not the caller — most
+   * importantly outbound email fan-out on anonymous endpoints, which a
+   * per-IP limit cannot bound when the source rotates addresses.
+   */
+  global?: boolean;
 }
 
 /**
  * Fixed-window MongoDB-backed rate limiter, suitable for serverless
- * deployments where in-memory counters do not work. Uses a per-IP+scope key.
+ * deployments where in-memory counters do not work. Uses a per-IP+scope key,
+ * or a single shared key when `global` is set.
  */
 export async function checkRateLimit(
   req: NextRequest,
@@ -41,7 +49,7 @@ export async function checkRateLimit(
 ): Promise<void> {
   await connectToDatabase();
   const ip = clientIp(req);
-  const key = `${scope}:${ip}`;
+  const key = options.global ? `${scope}:global` : `${scope}:${ip}`;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + options.windowSeconds * 1000);
 
