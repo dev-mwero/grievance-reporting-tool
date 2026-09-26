@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  acceptInvitationSchema,
   changePasswordSchema,
   createInvitationSchema,
   forgotPasswordSchema,
@@ -85,6 +86,52 @@ describe("forgotPasswordSchema", () => {
       forgotPasswordSchema.parse({ email: "user@example.com" }),
     ).toBeTruthy();
     expect(() => forgotPasswordSchema.parse({ email: "u@e" })).toThrow();
+  });
+});
+
+describe("acceptInvitationSchema", () => {
+  const base = {
+    token: "raw-token",
+    password: "StrongPass1",
+    confirmPassword: "StrongPass1",
+  };
+
+  it("requires a token", () => {
+    expect(() =>
+      acceptInvitationSchema.parse({ ...base, token: "" }),
+    ).toThrow();
+  });
+
+  it("accepts the optional profile fields, including department", () => {
+    const parsed = acceptInvitationSchema.parse({
+      ...base,
+      name: "Jane Officer",
+      phone: "+254700000000",
+      title: "HR Officer",
+      department: "Human Resources",
+    });
+    expect(parsed.department).toBe("Human Resources");
+  });
+
+  it("treats every profile field as optional", () => {
+    expect(acceptInvitationSchema.parse(base)).toBeTruthy();
+  });
+
+  it("rejects weak passwords and mismatched confirmations", () => {
+    expect(() =>
+      acceptInvitationSchema.parse({
+        ...base,
+        password: "alllowercase1",
+        confirmPassword: "alllowercase1",
+      }),
+    ).toThrow();
+    expect(() =>
+      acceptInvitationSchema.parse({
+        ...base,
+        password: "StrongPass1",
+        confirmPassword: "Different1",
+      }),
+    ).toThrow();
   });
 });
 

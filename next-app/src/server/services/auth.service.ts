@@ -232,19 +232,12 @@ export async function resetPassword(input: {
 
 // ─── Accept Invitation ──────────────────────────────────────────────────────
 
-export async function acceptInvitation(input: {
-  token: string;
-  name?: string;
-  phone?: string;
-  title?: string;
-  password: string;
-}) {
-  const hashedToken = hashToken(input.token);
-
+/** Look up a pending invitation by raw token without consuming it. */
+async function findPendingInvitation(rawToken: string) {
   const invitation = await Invitation.findOne({
-    token: hashedToken,
+    token: hashToken(rawToken),
     acceptedAt: { $exists: false },
-  }).select("+token");
+  });
 
   if (!invitation) {
     throw ApiError.badRequest("Invalid or expired invitation");
@@ -253,6 +246,36 @@ export async function acceptInvitation(input: {
   if (invitation.expiresAt < new Date()) {
     throw ApiError.badRequest("Invitation has expired");
   }
+
+  return invitation;
+}
+
+/**
+ * Preflight lookup for the accept-invitation form so an invalid or expired
+ * link is rejected before the invitee fills anything in, and so the form can
+ * show which account they are completing.
+ */
+export async function getInvitationPreview(rawToken: string) {
+  const invitation = await findPendingInvitation(rawToken);
+
+  return {
+    name: invitation.name,
+    email: invitation.email,
+    role: invitation.role,
+    title: invitation.title ?? "",
+    expiresAt: invitation.expiresAt.toISOString(),
+  };
+}
+
+export async function acceptInvitation(input: {
+  token: string;
+  name?: string;
+  phone?: string;
+  title?: string;
+  department?: string;
+  password: string;
+}) {
+  const invitation = await findPendingInvitation(input.token);
 
   const existingUser = await User.findOne({ email: invitation.email });
   if (existingUser) {
@@ -266,6 +289,7 @@ export async function acceptInvitation(input: {
     email: invitation.email,
     phone: input.phone ?? invitation.phone,
     title: input.title ?? invitation.title,
+    department: input.department,
     role: invitation.role,
     passwordHash,
     isActive: true,

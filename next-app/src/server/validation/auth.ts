@@ -62,6 +62,7 @@ export const acceptInvitationSchema = z
     name: z.string().trim().min(1, "Name is required").max(200).optional(),
     phone: z.string().max(20).optional(),
     title: z.string().max(200).optional(),
+    department: z.string().max(200).optional(),
     password: passwordField,
     confirmPassword: z.string().min(1, "Password confirmation is required"),
   })
