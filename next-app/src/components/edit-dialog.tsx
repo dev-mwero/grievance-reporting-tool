@@ -20,7 +20,6 @@ export function EditDialog({
   saving,
   error,
   submitLabel = "Save changes",
-  cancelDisabled = false,
   children,
 }: {
   open: boolean;
@@ -34,11 +33,9 @@ export function EditDialog({
   saving?: boolean;
   error?: string | null;
   submitLabel?: string;
-  /** Block closing while a save is in flight. */
-  cancelDisabled?: boolean;
   children: ReactNode;
 }) {
-  const locked = saving || cancelDisabled;
+  const locked = Boolean(saving);
 
   return (
     <Modal
@@ -61,7 +58,13 @@ export function EditDialog({
           >
             Cancel
           </Button>
-          <Button onClick={onSubmit} disabled={locked} type="submit">
+          {/*
+            The footer is visually inside the dialog but not a descendant of
+            <form>, so this button cannot carry the form's submit behaviour.
+            Clicking calls onSubmit directly, and Enter inside the form goes
+            through the hidden submit below.
+          */}
+          <Button onClick={onSubmit} disabled={locked} type="button">
             {saving ? "Saving…" : submitLabel}
           </Button>
         </>

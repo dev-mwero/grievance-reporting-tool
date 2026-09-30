@@ -203,11 +203,24 @@ export function Modal({
   }, [open, onKeyDown]);
 
   // Move focus into the dialog so keyboard and screen-reader users are not
-  // left behind on the table row that opened it.
+  // left behind on the table row that opened it, and hand focus back to that
+  // row on close — without it, dismissing the dialog drops the user at the top
+  // of the page and they lose their place in the table.
   useEffect(() => {
     if (!open) return;
+    const trigger = document.activeElement;
     const first = panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
     first?.focus();
+
+    return () => {
+      if (
+        trigger instanceof HTMLElement &&
+        trigger.isConnected &&
+        !panelRef.current?.contains(trigger)
+      ) {
+        trigger.focus();
+      }
+    };
   }, [open]);
 
   if (!open) return null;
