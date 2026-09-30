@@ -1,3 +1,4 @@
+import { humanizeStageKey, type StageDescriptor } from "@/lib/stages";
 import { ApiError } from "../api-error";
 import { Grievance } from "../models/grievance.model";
 import {
@@ -69,6 +70,51 @@ export async function resolveWorkflowForCategory(
   return Workflow.findOne({ isGlobal: true, isActive: true, ...notDeleted() });
 }
 
+/**
+ * Stage keys to display metadata, across every active workflow.
+ *
+ * Loaded once per request rather than per grievance: a list page rendering 25
+ * complaints must not issue 25 workflow lookups. Keys are namespaced by workflow
+ * in principle but shared in practice — the seed reuses one key per stage across
+ * workflows — so a single map is enough and a later workflow simply overrides an
+ * earlier label for that key.
+ */
+export async function loadStageLabels(): Promise<Map<string, StageDescriptor>> {
+  const workflows = await Workflow.find({ isActive: true, ...notDeleted() })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  const map = new Map<string, StageDescriptor>();
+  for (const workflow of workflows) {
+    for (const stage of workflow.stages) {
+      map.set(stage.key, {
+        key: stage.key,
+        label: stage.label,
+        color: stage.color,
+        isFinal: stage.isFinal,
+        order: stage.order,
+      });
+    }
+  }
+  return map;
+}
+
+/** Attach `stage` to each grievance so the UI can render a renamed stage correctly. */
+export function withStage<T extends { status: string }>(
+  items: T[],
+  labels: Map<string, StageDescriptor>,
+): (T & { stage: StageDescriptor })[] {
+  return items.map((item) => ({
+    ...item,
+    stage: labels.get(item.status) ?? {
+      key: item.status,
+      label: humanizeStageKey(item.status),
+      isFinal: false,
+      order: 0,
+    },
+  }));
+}
+
 /** The workflow's stage list plus its transitions, in the shape the graph rules expect. */
 export function toGraph(workflow: IWorkflow): WorkflowGraph {
   return {
@@ -86,6 +132,7 @@ export function toGraph(workflow: IWorkflow): WorkflowGraph {
       requiresApproval: transition.requiresApproval,
       requiresReason: transition.requiresReason,
       requiresAttachment: transition.requiresAttachment,
+      isReopen: transition.isReopen,
     })),
     startStageKey: workflow.startStageKey,
   };
@@ -247,6 +294,28 @@ export async function updateWorkflow(
     startStageKey: input.startStageKey ?? workflow.startStageKey,
   };
   assertGraphIsSane(merged);
+
+  // Deleting a stage that complaints are currently sitting in would strand them:
+  // their status would name a stage that no longer exists, leaving them with no
+  // moves and no way to explain why. Renaming is fine; removing is not.
+  if (input.stages) {
+    const removed = workflow.stages
+      .filter((old) => !input.stages?.some((s) => s.key === old.key))
+      .map((s) => s.key);
+
+    if (removed.length > 0) {
+      const stranded = await Grievance.countDocuments({
+        workflowId: workflow._id,
+        status: { $in: removed },
+        deletedAt: { $exists: false },
+      });
+      if (stranded > 0) {
+        throw ApiError.conflict(
+          `${stranded} complaint(s) are in ${removed.join(", ")}. Move them on before deleting those stages.`,
+        );
+      }
+    }
+  }
 
   const isActive = input.isActive ?? workflow.isActive;
   if (isActive) {

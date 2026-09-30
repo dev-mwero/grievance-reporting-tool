@@ -106,8 +106,35 @@ export async function bootstrapDefaultWorkflow(): Promise<void> {
           requiresApproval: seedRequiresApproval(from, to),
           requiresReason: seedRequiresReason(from, to),
           requiresAttachment: false,
+          isReopen: false,
         })),
     );
+
+    // The legacy table treats CLOSED and REJECTED as terminal, so it contains no
+    // way back out of them. The product requirement is that an admin can reopen
+    // a closed complaint, so the seed supplies that exit rather than inheriting
+    // the gap — a final stage with no reopen would make "reopen" impossible in
+    // the default cycle. Each final stage reopens to the deepest live stage,
+    // which is where the complaint was when it was being worked.
+    const reopenTarget = stages
+      .filter((stage) => !stage.isFinal)
+      .reduce((deepest, stage) =>
+        stage.order > deepest.order ? stage : deepest,
+      );
+
+    for (const stage of stages.filter((s) => s.isFinal)) {
+      transitions.push({
+        from: stage.key,
+        to: reopenTarget.key,
+        actionLabel: "Reopen",
+        allowedRoles: ["ADMIN"],
+        // An admin acts directly, so a second approver would only add a step.
+        requiresApproval: false,
+        requiresReason: true,
+        requiresAttachment: false,
+        isReopen: true,
+      });
+    }
 
     await Workflow.create({
       name: GLOBAL_WORKFLOW_NAME,

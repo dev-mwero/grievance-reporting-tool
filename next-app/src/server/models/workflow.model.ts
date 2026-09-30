@@ -48,6 +48,13 @@ export interface IWorkflowTransition {
   requiresApproval: boolean;
   requiresReason: boolean;
   requiresAttachment: boolean;
+  /**
+   * The single sanctioned exit from a final stage. Final stages otherwise have
+   * no outgoing moves at all, which is what makes them final; an admin-only
+   * reopen is the one deliberate exception, so a closed complaint can be
+   * revived without pretending it was never final.
+   */
+  isReopen?: boolean;
 }
 
 export interface IWorkflow extends Document, ISoftDeletable {
@@ -103,6 +110,7 @@ const transitionSchema = new Schema<IWorkflowTransition>(
     requiresApproval: { type: Boolean, default: false },
     requiresReason: { type: Boolean, default: false },
     requiresAttachment: { type: Boolean, default: false },
+    isReopen: { type: Boolean, default: false },
   },
   { _id: false },
 );

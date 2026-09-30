@@ -23,8 +23,8 @@ import {
 } from "@/components/ui";
 import { ApiClientError, apiGet, apiPatch, apiPost, queryFn } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import type { StageDescriptor } from "@/lib/stages";
 import { formatDate, formatRelative } from "@/lib/utils";
-import { canTransition, GrievanceStatus } from "@/types";
 
 interface GrievanceDetail {
   grievance: {
@@ -40,6 +40,7 @@ interface GrievanceDetail {
     wardId: { name: string } | null;
     categoryId: { name: string } | null;
     primaryAssigneeId?: { name: string; email: string; title?: string };
+    stage?: StageDescriptor;
   };
   updates: Array<{
     _id: string;
@@ -56,6 +57,17 @@ interface GrievanceDetail {
   }>;
 }
 
+/** A move the server says this actor may take right now. */
+interface GrievanceMove {
+  to: string;
+  toLabel: string;
+  actionLabel: string;
+  requiresApproval: boolean;
+  requiresReason: boolean;
+  requiresAttachment: boolean;
+  isReopen: boolean;
+}
+
 export default function GrievanceDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -69,10 +81,11 @@ export default function GrievanceDetailPage() {
   >("PUBLIC_UPDATE");
   const [error, setError] = useState<string | null>(null);
 
-  // Status transition
-  const [newStatus, setNewStatus] = useState<GrievanceStatus | "">("");
+  // Which configured move to apply. The options come from the server, which runs
+  // the same check that authorises the move — so the UI cannot offer something
+  // that would then be refused.
+  const [chosenMove, setChosenMove] = useState("");
   const [statusNote, setStatusNote] = useState("");
-  const opts = Object.values(GrievanceStatus);
 
   const { data, isLoading } = useQuery({
     queryKey: ["/grievances", id],
@@ -122,16 +135,33 @@ export default function GrievanceDetailPage() {
     onError: () => setError("Failed to add update."),
   });
 
+  const { data: moves = [] } = useQuery({
+    queryKey: ["/grievances", id, "moves"],
+    queryFn: async ({ signal }) => {
+      const result = await apiGet<GrievanceMove[]>(
+        `/grievances/${id}/moves`,
+        signal,
+      );
+      return result;
+    },
+    enabled: Boolean(id),
+  });
+
+  const selectedMove = moves.find((m) => m.to === chosenMove);
+
   const statusMutation = useMutation({
     mutationFn: () =>
       apiPatch(`/grievances/${id}/status`, {
-        status: newStatus,
+        status: chosenMove,
         note: statusNote || undefined,
       }),
     onSuccess: () => {
-      setNewStatus("");
+      setChosenMove("");
       setStatusNote("");
       queryClient.invalidateQueries({ queryKey: ["/grievances", id] });
+      queryClient.invalidateQueries({
+        queryKey: ["/grievances", id, "moves"],
+      });
     },
     onError: (err) =>
       setError(
@@ -156,9 +186,6 @@ export default function GrievanceDetailPage() {
   }
 
   const g = data.grievance;
-  const transitions = opts.filter((s) =>
-    canTransition(g.status as GrievanceStatus, s),
-  );
 
   return (
     <div className="space-y-6">
@@ -183,7 +210,9 @@ export default function GrievanceDetailPage() {
           </p>
         </div>
         <StatusBadge
-          status={g.status as GrievanceStatus}
+          status={g.status}
+          label={g.stage?.label}
+          color={g.stage?.color}
           className="self-start sm:self-auto"
         />
       </div>
@@ -319,44 +348,85 @@ export default function GrievanceDetailPage() {
             </Card>
           )}
 
-          {isAdmin && (
+          {moves.length > 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>Actions</CardTitle>
+                <CardTitle>Move this complaint</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-5">
+              <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="update-status">Change status</Label>
+                  <Label htmlFor="update-status">Next step</Label>
                   <Select
                     id="update-status"
-                    value={newStatus}
-                    onChange={(e) =>
-                      setNewStatus(e.target.value as GrievanceStatus | "")
-                    }
+                    value={chosenMove}
+                    onChange={(e) => {
+                      setChosenMove(e.target.value);
+                      // Drop a stale reason when switching between moves, so
+                      // text typed for one is not silently reused on another.
+                      setStatusNote("");
+                    }}
                   >
-                    <option value="">Select status…</option>
-                    {transitions.map((s) => (
-                      <option key={s} value={s}>
-                        {s.replace("_", " ")}
+                    <option value="">Select an action…</option>
+                    {moves.map((m) => (
+                      <option key={m.to} value={m.to}>
+                        {m.actionLabel} → {m.toLabel}
                       </option>
                     ))}
                   </Select>
+                </div>
+
+                {selectedMove?.isReopen && (
+                  <Alert variant="info">
+                    Reopening returns this complaint to active work. Say why.
+                  </Alert>
+                )}
+
+                <div>
+                  <Label htmlFor="status-note">
+                    {selectedMove?.requiresReason
+                      ? "Reason (required)"
+                      : "Reason (optional)"}
+                  </Label>
                   <Textarea
-                    className="mt-2"
-                    placeholder="Note shown to the complainant (optional)"
+                    id="status-note"
+                    className="mt-1"
+                    placeholder="Shown to the complainant in the tracking timeline."
                     value={statusNote}
                     onChange={(e) => setStatusNote(e.target.value)}
                   />
-                  <Button
-                    className="mt-2 w-full"
-                    onClick={() => statusMutation.mutate()}
-                    disabled={!newStatus || statusMutation.isPending}
-                  >
-                    {statusMutation.isPending ? "Updating…" : "Update status"}
-                  </Button>
                 </div>
+
+                <Button
+                  className="w-full"
+                  onClick={() => statusMutation.mutate()}
+                  disabled={
+                    !chosenMove ||
+                    statusMutation.isPending ||
+                    (selectedMove?.requiresReason === true &&
+                      statusNote.trim() === "")
+                  }
+                >
+                  {statusMutation.isPending ? "Applying…" : "Apply move"}
+                </Button>
               </CardContent>
             </Card>
+          ) : (
+            // An admin with nothing available is a workflow gap, so say that
+            // rather than showing an empty panel they cannot act on.
+            isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Move this complaint</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Alert variant="info">
+                    No moves are available from{" "}
+                    <strong>{g.stage?.label ?? g.status}</strong>. Add a move
+                    out of this stage in the complaint cycle, or reopen it.
+                  </Alert>
+                </CardContent>
+              </Card>
+            )
           )}
         </div>
       </div>

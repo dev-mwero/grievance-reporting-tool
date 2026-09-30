@@ -23,6 +23,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { apiErrorMessage, apiPatch, queryFn } from "@/lib/api";
+import type { StageDescriptor } from "@/lib/stages";
 import { formatDate } from "@/lib/utils";
 import { GrievanceStatus } from "@/types";
 
@@ -39,6 +40,7 @@ interface GrievanceRow {
   primaryAssigneeId: { _id: string; name: string } | null;
   deletedAt?: string;
   deleteReason?: string;
+  stage?: StageDescriptor;
 }
 
 interface ListResponse {
@@ -215,7 +217,11 @@ export default function AdminGrievancesPage() {
                             Deleted
                           </span>
                         ) : (
-                          <StatusBadge status={g.status as GrievanceStatus} />
+                          <StatusBadge
+                            status={g.status}
+                            label={g.stage?.label}
+                            color={g.stage?.color}
+                          />
                         )}
                       </td>
                       <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">

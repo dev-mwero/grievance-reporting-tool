@@ -10,14 +10,23 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   return handle(async () => {
-    const user = await requireRole(Role.ADMIN, Role.SUPER_ADMIN);
+    // All three roles may attempt a move. Whether this particular actor may
+    // take this particular move is decided by the workflow plus the assignment
+    // check in the service, so the route does not gate on role.
+    const user = await requireRole(Role.ADMIN, Role.SUPER_ADMIN, Role.STAFF);
     const { id } = await params;
     const body = validate(
       updateStatusSchema,
       await req.json().catch(() => ({})),
     );
     const actorName = await getActorName(user);
-    const grievance = await updateStatus(id, body, user.userId, actorName);
+    const grievance = await updateStatus(
+      id,
+      body,
+      user.userId,
+      actorName,
+      user.role,
+    );
     return ok(grievance, 200);
   });
 }

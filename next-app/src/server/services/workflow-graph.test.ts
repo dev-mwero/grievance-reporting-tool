@@ -229,3 +229,168 @@ describe("availableTransitions", () => {
     expect(availableTransitions(graph, "CLOSED", "ADMIN")).toEqual([]);
   });
 });
+
+describe("reopen is the only way out of a final stage", () => {
+  const base = {
+    stages: [
+      { key: "OPEN", label: "Open", isFinal: false, order: 0 },
+      { key: "DONE", label: "Done", isFinal: true, order: 1 },
+    ],
+    startStageKey: "OPEN",
+    transitions: [t("OPEN", "DONE", "Finish")],
+  };
+
+  function t(
+    from: string,
+    to: string,
+    actionLabel: string,
+    allowedRoles: string[] = ["ADMIN"],
+    isReopen = false,
+    extra: Record<string, unknown> = {},
+  ) {
+    return {
+      from,
+      to,
+      actionLabel,
+      allowedRoles,
+      requiresApproval: false,
+      requiresReason: isReopen,
+      requiresAttachment: false,
+      isReopen,
+      ...extra,
+    };
+  }
+
+  it("accepts an admin-only reopen out of a final stage", () => {
+    expect(
+      validateWorkflowGraph({
+        ...base,
+        transitions: [
+          ...base.transitions,
+          t("DONE", "OPEN", "Reopen", ["ADMIN"], true),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("still rejects an ordinary move out of a final stage", () => {
+    const issues = validateWorkflowGraph({
+      ...base,
+      transitions: [...base.transitions, t("DONE", "OPEN", "Back to open")],
+    });
+    expect(issues.map((i) => i.code)).toContain("final-stage-has-outgoing");
+  });
+
+  it("rejects a reopen that staff could take", () => {
+    const issues = validateWorkflowGraph({
+      ...base,
+      transitions: [
+        ...base.transitions,
+        t("DONE", "OPEN", "Reopen", ["ADMIN", "STAFF"], true),
+      ],
+    });
+    expect(issues.map((i) => i.code)).toContain("reopen-not-admin-only");
+  });
+
+  it("rejects a reopen with no reason", () => {
+    const issues = validateWorkflowGraph({
+      ...base,
+      transitions: [
+        ...base.transitions,
+        t("DONE", "OPEN", "Reopen", ["ADMIN"], true, {
+          requiresReason: false,
+        }),
+      ],
+    });
+    expect(issues.map((i) => i.code)).toContain("reopen-requires-reason");
+  });
+
+  it("requires a reason on every move out of a non-final stage too", () => {
+    // Same rule, different shape: the dead-end check must not swallow it.
+    const issues = validateWorkflowGraph({
+      stages: [
+        { key: "OPEN", label: "Open", isFinal: false, order: 0 },
+        { key: "NEXT", label: "Next", isFinal: true, order: 1 },
+      ],
+      startStageKey: "OPEN",
+      transitions: [t("OPEN", "NEXT", "Finish")],
+    });
+    expect(issues).toEqual([]);
+  });
+});
+
+describe("availableTransitions separates acting from asking", () => {
+  const graph = {
+    stages: [
+      { key: "OPEN", label: "Open", isFinal: false, order: 0 },
+      { key: "DONE", label: "Done", isFinal: true, order: 1 },
+      { key: "BACK", label: "Back", isFinal: false, order: 2 },
+    ],
+    startStageKey: "OPEN",
+    transitions: [
+      {
+        from: "OPEN",
+        to: "DONE",
+        actionLabel: "Finish",
+        allowedRoles: ["ADMIN", "STAFF"],
+        requiresApproval: false,
+        requiresReason: false,
+        requiresAttachment: false,
+      },
+      {
+        from: "DONE",
+        to: "BACK",
+        actionLabel: "Reopen",
+        allowedRoles: ["ADMIN"],
+        requiresApproval: false,
+        requiresReason: true,
+        requiresAttachment: false,
+        isReopen: true,
+      },
+      {
+        from: "OPEN",
+        to: "BACK",
+        actionLabel: "Escalate",
+        allowedRoles: ["STAFF"],
+        requiresApproval: true,
+        requiresReason: true,
+        requiresAttachment: false,
+      },
+    ],
+  };
+
+  it("hides approval-gated moves from staff until proposals exist", () => {
+    const forStaff = availableTransitions(graph, "OPEN", "STAFF");
+    expect(forStaff.map((t) => t.actionLabel)).toEqual(["Finish"]);
+  });
+
+  it("offers approval-gated moves to admins, who apply them directly", () => {
+    const forAdmin = availableTransitions(graph, "OPEN", "ADMIN");
+    expect(forAdmin.map((t) => t.actionLabel).sort()).toEqual([
+      "Escalate",
+      "Finish",
+    ]);
+  });
+
+  it("reveals gated moves to staff once proposals are enabled", () => {
+    const forStaff = availableTransitions(graph, "OPEN", "STAFF", {
+      includeApprovalGated: true,
+    });
+    expect(forStaff.map((t) => t.actionLabel).sort()).toEqual([
+      "Escalate",
+      "Finish",
+    ]);
+  });
+
+  it("never offers a reopen to staff, even as a proposal", () => {
+    const forStaff = availableTransitions(graph, "DONE", "STAFF", {
+      includeApprovalGated: true,
+    });
+    expect(forStaff).toEqual([]);
+  });
+
+  it("offers the reopen to an admin", () => {
+    const forAdmin = availableTransitions(graph, "DONE", "ADMIN");
+    expect(forAdmin.map((t) => t.actionLabel)).toEqual(["Reopen"]);
+  });
+});

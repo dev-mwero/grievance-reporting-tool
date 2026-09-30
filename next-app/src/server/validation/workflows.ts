@@ -34,6 +34,10 @@ export const workflowTransitionSchema = z.object({
   requiresApproval: z.boolean(),
   requiresReason: z.boolean(),
   requiresAttachment: z.boolean(),
+  // A reopen is the only sanctioned way out of a final stage, so it is flagged
+  // explicitly rather than inferred from the target stage. It is additionally
+  // forced to admin-only when the graph is validated.
+  isReopen: z.boolean().optional().default(false),
 });
 
 export type WorkflowTransitionInput = z.infer<typeof workflowTransitionSchema>;

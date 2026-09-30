@@ -13,7 +13,6 @@ import {
 } from "@/components/ui";
 import { queryFn } from "@/lib/api";
 import { formatRelative } from "@/lib/utils";
-import type { GrievanceStatus } from "@/types";
 
 interface DashboardStats {
   myAssigned: number;
@@ -118,11 +117,7 @@ export default function DashboardPage() {
                             </span>
                           )}
                           {item.grievanceId && (
-                            <StatusBadge
-                              status={
-                                item.grievanceId.status as GrievanceStatus
-                              }
-                            />
+                            <StatusBadge status={item.grievanceId.status} />
                           )}
                         </p>
                       </div>

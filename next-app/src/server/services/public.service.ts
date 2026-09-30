@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { stageFor } from "@/lib/stages";
 import { Role } from "@/types";
 import { ApiError } from "../api-error";
 import { sendGrievanceSubmittedEmail } from "../email";
@@ -13,6 +14,10 @@ import { sanitizeRichText } from "../sanitize";
 import { AuditAction } from "./audit.service";
 import { logGrievanceEvent } from "./audit-impl";
 import { createNotifications } from "./notification.service";
+import {
+  loadStageLabels,
+  resolveWorkflowForCategory,
+} from "./workflows.service";
 
 // ─── Lookup Data (Public) ───────────────────────────────────────────────────
 
@@ -105,14 +110,26 @@ export async function submitGrievance(input: {
 
   const sanitizedDescription = sanitizeRichText(input.description);
 
+  // The workflow decides where a new complaint starts and which cycle governs it.
+  // Pinning the workflow id here means editing a workflow later cannot change
+  // how a complaint already in flight is expected to progress.
+  const workflow = await resolveWorkflowForCategory(input.categoryId);
+  if (!workflow) {
+    throw ApiError.badRequest(
+      "Complaints cannot be submitted right now — no active complaint workflow is configured",
+    );
+  }
+
   const grievance = await Grievance.create({
     subCountyId: input.subCountyId,
     wardId: input.wardId,
     categoryId: input.categoryId,
+    workflowId: workflow._id,
     subCountyName: subCounty.name,
     wardName: ward.name,
     categoryName: category.name,
     description: sanitizedDescription,
+    status: workflow.startStageKey,
     submittedAt: new Date(),
   });
 
@@ -227,9 +244,14 @@ export async function trackByReferenceCode(referenceCode: string) {
     .sort({ createdAt: 1 })
     .lean();
 
+  const [labels] = await Promise.all([loadStageLabels()]);
+
   return {
     referenceCode: grievance.referenceCode,
     status: grievance.status,
+    // A complainant tracking their case should read the stage's real name, not
+    // an internal key that may since have been renamed.
+    stage: stageFor(grievance.status, labels),
     subCountyName: grievance.subCountyName,
     wardName: grievance.wardName,
     categoryName: grievance.categoryName,

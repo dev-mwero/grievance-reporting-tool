@@ -14,6 +14,7 @@ import {
   StatusBadge,
 } from "@/components/ui";
 import { queryFn } from "@/lib/api";
+import type { StageDescriptor } from "@/lib/stages";
 import { formatDate } from "@/lib/utils";
 import { GrievanceStatus } from "@/types";
 
@@ -25,6 +26,7 @@ interface GrievanceRow {
   createdAt: string;
   categoryId?: { name: string } | null;
   primaryAssigneeId?: { name: string } | null;
+  stage?: StageDescriptor;
 }
 
 interface GrievanceListResponse {
@@ -143,7 +145,11 @@ export default function GrievanceListPage() {
                         {g.referenceCode}
                       </td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={g.status as GrievanceStatus} />
+                        <StatusBadge
+                          status={g.status}
+                          label={g.stage?.label}
+                          color={g.stage?.color}
+                        />
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
                         {g.categoryId?.name ?? "—"}

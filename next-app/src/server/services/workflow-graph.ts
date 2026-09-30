@@ -21,6 +21,8 @@ export interface GraphTransition {
   requiresApproval: boolean;
   requiresReason: boolean;
   requiresAttachment: boolean;
+  /** The one sanctioned exit from a final stage. Admin-only, reason required. */
+  isReopen?: boolean;
 }
 
 export interface WorkflowGraph {
@@ -41,7 +43,9 @@ export interface ValidationIssue {
     | "dead-end-stage"
     | "final-stage-has-outgoing"
     | "orphan-stage"
-    | "transition-without-roles";
+    | "transition-without-roles"
+    | "reopen-not-admin-only"
+    | "reopen-requires-reason";
   message: string;
   /** Stage key the issue relates to, when it relates to exactly one. */
   stageKey?: string;
@@ -134,28 +138,52 @@ export function validateWorkflowGraph(graph: WorkflowGraph): ValidationIssue[] {
   }
 
   // A non-final stage with no way out strands the complaint there forever.
+  // A final stage may still be left by an admin-only reopen — that is the
+  // deliberate exception that lets a closed complaint be revived — but it must
+  // have no other exit, or "final" stops meaning anything.
+  const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN"]);
+
   for (const stage of stages) {
-    if (stage.isFinal) continue;
-    const hasOutgoing = transitions.some((t) => t.from === stage.key);
-    if (!hasOutgoing) {
+    const outgoing = transitions.filter((t) => t.from === stage.key);
+    if (!stage.isFinal) {
+      if (outgoing.length === 0) {
+        issues.push({
+          code: "dead-end-stage",
+          message: `"${stage.label}" is not final, so it needs at least one move out of it.`,
+          stageKey: stage.key,
+        });
+      }
+      continue;
+    }
+
+    const notReopens = outgoing.filter((t) => !t.isReopen);
+    if (notReopens.length > 0) {
       issues.push({
-        code: "dead-end-stage",
-        message: `"${stage.label}" is not final, so it needs at least one move out of it.`,
+        code: "final-stage-has-outgoing",
+        message: `"${stage.label}" is final, so it can only be left by a reopen. ${notReopens.length} move(s) out of it are neither.`,
         stageKey: stage.key,
       });
     }
-  }
 
-  // Marking a stage final while moves still lead out of it contradicts itself.
-  for (const stage of stages) {
-    if (!stage.isFinal) continue;
-    const outgoing = transitions.filter((t) => t.from === stage.key);
-    if (outgoing.length > 0) {
-      issues.push({
-        code: "final-stage-has-outgoing",
-        message: `"${stage.label}" is final but has ${outgoing.length} move(s) out of it.`,
-        stageKey: stage.key,
-      });
+    for (const transition of outgoing.filter((t) => t.isReopen)) {
+      const roles = transition.allowedRoles ?? [];
+      if (roles.length === 0 || roles.some((r) => !ADMIN_ROLES.has(r))) {
+        issues.push({
+          code: "reopen-not-admin-only",
+          message: `Only an admin may reopen from "${stage.label}". Allow admin roles only on that move.`,
+          stageKey: stage.key,
+        });
+      }
+      // Reopening sends the complaint backwards into live work, so it has to be
+      // explained. A reopen with no reason would make a revived complaint
+      // indistinguishable from one that was never closed.
+      if (!transition.requiresReason) {
+        issues.push({
+          code: "reopen-requires-reason",
+          message: `Reopening from "${stage.label}" must ask for a reason.`,
+          stageKey: stage.key,
+        });
+      }
     }
   }
 
@@ -173,15 +201,28 @@ export function isWorkflowGraphValid(graph: WorkflowGraph): boolean {
  * Admin and Super Admin see everything: they are the escalation path when a
  * staff member has no configured move available, and the requirement is that an
  * admin can always move a complaint forward or reopen it.
+ *
+ * `includeApprovalGated` is what separates "may act on this now" from "may ask
+ * for this". It is false until staff proposals exist, so a gated move is not
+ * offered as a button that would then be refused.
  */
 export function availableTransitions(
   graph: WorkflowGraph,
   fromKey: string,
   role: string,
+  { includeApprovalGated = false }: { includeApprovalGated?: boolean } = {},
 ): GraphTransition[] {
+  const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
   const candidates = graph.transitions.filter((t) => t.from === fromKey);
-  if (role === "ADMIN" || role === "SUPER_ADMIN") {
-    return candidates;
-  }
-  return candidates.filter((t) => t.allowedRoles.includes(role));
+
+  if (isAdmin) return candidates;
+
+  return candidates.filter(
+    (t) =>
+      t.allowedRoles.includes(role) &&
+      // A reopen is admin-only by validation; honour it here too so a
+      // misconfigured draft cannot hand staff a way to revive a closed case.
+      !t.isReopen &&
+      (includeApprovalGated || !t.requiresApproval),
+  );
 }

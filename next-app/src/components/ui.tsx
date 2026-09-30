@@ -13,6 +13,7 @@ import {
   useId,
   useRef,
 } from "react";
+import { humanizeStageKey } from "@/lib/stages";
 import { cn } from "@/lib/utils";
 import type { GrievanceStatus } from "@/types";
 
@@ -374,21 +375,46 @@ const statusDots: Record<GrievanceStatus, string> = {
 
 export function StatusBadge({
   status,
+  label,
+  color,
   className,
 }: {
-  status: GrievanceStatus;
+  status: string;
+  /**
+   * The stage's current display name from its workflow. Absent for legacy
+   * statuses, where the key itself is the best available name.
+   */
+  label?: string;
+  /** Optional hex from the workflow, applied only to the dot. */
+  color?: string;
   className?: string;
 }) {
+  // Prefer the admin's palette for the known stages, fall back to a neutral one
+  // for stages this build has never seen, so a custom stage still renders
+  // legibly instead of as an unstyled span.
+  const known = statusStyles[status as GrievanceStatus];
+  const dot = statusDots[status as GrievanceStatus] ?? "bg-slate-400";
+  const styles = known ?? "bg-slate-100 text-slate-700 border-slate-200";
+
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-        statusStyles[status],
+        styles,
         className,
       )}
     >
-      <span className={cn("h-2 w-2 rounded-full", statusDots[status])} />
-      {status.replace("_", " ")}
+      {color ? (
+        // Arbitrary hex cannot be a Tailwind class — those are purged at build
+        // time — so the workflow's own colour goes through an inline style.
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      ) : (
+        <span className={cn("h-2 w-2 rounded-full", dot)} />
+      )}
+      {label ?? humanizeStageKey(status)}
     </span>
   );
 }

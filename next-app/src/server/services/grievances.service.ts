@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { after } from "next/server";
-import { canTransition, GrievanceStatus } from "@/types";
+import { Role } from "@/types";
 import { ApiError } from "../api-error";
 import { sendGrievanceAssignedEmail } from "../email";
 import { Grievance, type IGrievance } from "../models/grievance.model";
@@ -12,6 +12,7 @@ import { type DeletionScope, deletionFilter } from "../models/soft-delete";
 import { SubCounty } from "../models/sub-county.model";
 import { User } from "../models/user.model";
 import { Ward } from "../models/ward.model";
+import { type IWorkflow, Workflow } from "../models/workflow.model";
 import { sanitizeRichText } from "../sanitize";
 import { AuditAction } from "./audit.service";
 import { logGrievanceEvent } from "./audit-impl";
@@ -24,6 +25,17 @@ import {
   softDeleteRecord,
 } from "./deletion.service";
 import { createNotifications } from "./notification.service";
+import { availableTransitions } from "./workflow-graph";
+import {
+  loadStageLabels,
+  resolveWorkflowForCategory,
+  toGraph,
+  withStage,
+} from "./workflows.service";
+
+function isAdminRole(role: string): boolean {
+  return role === Role.ADMIN || role === Role.SUPER_ADMIN;
+}
 
 // ─── List Grievances ────────────────────────────────────────────────────────
 
@@ -86,7 +98,7 @@ export async function listGrievances(query: {
       (filter.submittedAt as Record<string, unknown>).$lte = new Date(dateTo);
   }
 
-  const [grievances, total] = await Promise.all([
+  const [grievances, total, labels] = await Promise.all([
     Grievance.find(filter)
       .populate("categoryId", "name")
       .populate("primaryAssigneeId", "name email")
@@ -95,10 +107,16 @@ export async function listGrievances(query: {
       .skip((page - 1) * limit)
       .limit(limit),
     Grievance.countDocuments(filter),
+    loadStageLabels(),
   ]);
 
   return {
-    grievances,
+    // Stages ride along with each row so a renamed stage displays its new name
+    // here too, not just in the workflow builder. One lookup for the page.
+    grievances: withStage(
+      grievances.map((g) => g.toObject()),
+      labels,
+    ),
     pagination: {
       page,
       limit,
@@ -140,7 +158,13 @@ export async function getGrievanceById(
     .populate("assignedBy", "name email")
     .sort({ assignedAt: -1 });
 
-  return { grievance, updates, assignments };
+  const [labels] = await Promise.all([loadStageLabels()]);
+
+  return {
+    grievance: withStage([grievance.toObject()], labels)[0],
+    updates,
+    assignments,
+  };
 }
 
 // ─── Admin Edit ─────────────────────────────────────────────────────────────
@@ -249,9 +273,10 @@ export async function updateGrievance(
 
 export async function updateStatus(
   grievanceId: string,
-  input: { status: GrievanceStatus; note?: string },
+  input: { status: string; note?: string },
   userId: string,
   userName: string,
+  role: string,
 ) {
   const grievance = await Grievance.findById(grievanceId);
   if (!grievance) {
@@ -263,45 +288,100 @@ export async function updateStatus(
     );
   }
 
-  if (!canTransition(grievance.status, input.status)) {
+  const workflow = await loadWorkflowForGrievance(grievance);
+  const graph = toGraph(workflow);
+  const target = input.status;
+
+  // Staff act on complaints they are working on. Without this check, opening the
+  // route to staff would let any staff member move any complaint in the system
+  // just by knowing its id.
+  if (!isAdminRole(role)) {
+    const assigned =
+      grievance.primaryAssigneeId?.toString() === userId ||
+      grievance.supportingAssignees.some((id) => id.toString() === userId);
+    if (!assigned) {
+      throw ApiError.forbidden("You can only move complaints assigned to you");
+    }
+  }
+
+  if (!graph.stages.some((s) => s.key === target)) {
     throw ApiError.badRequest(
-      `Cannot transition from ${grievance.status} to ${input.status}`,
+      `"${target}" is not a stage of this complaint's workflow`,
     );
   }
 
+  // The workflow, not a hardcoded table, decides what is reachable. Distinguish
+  // the three ways this can fail, because the remedy differs: the move may not
+  // exist at all, may exist but be closed to this role, or may need an admin's
+  // sign-off before anyone else can take it.
+  const configured = graph.transitions.find(
+    (t) => t.from === grievance.status && t.to === target,
+  );
+
+  if (!configured) {
+    throw ApiError.badRequest(
+      `No move from "${grievance.status}" to "${target}" is defined in this workflow`,
+    );
+  }
+
+  const roleAllows =
+    isAdminRole(role) || configured.allowedRoles.includes(role);
+
+  // A reopen is admin-only. Admins are the escalation path, so the restriction
+  // never applies to them — it only stops staff reviving a closed complaint.
+  if (!roleAllows || (configured.isReopen && !isAdminRole(role))) {
+    throw ApiError.forbidden("You do not have permission to make that move");
+  }
+
+  // A move configured to need approval cannot be taken directly by staff; it has
+  // to be proposed. Until proposals exist it is refused rather than silently
+  // applied, so the approval requirement cannot be bypassed.
+  if (!isAdminRole(role) && configured.requiresApproval) {
+    throw ApiError.forbidden(
+      `"${configured.actionLabel}" needs an admin's approval — it cannot be applied directly`,
+    );
+  }
+
+  const reason = input.note?.trim();
+  if (configured.requiresReason && !reason) {
+    throw ApiError.badRequest(`"${configured.actionLabel}" requires a reason`);
+  }
+
   const previousStatus = grievance.status;
-  grievance.status = input.status;
+  grievance.status = target;
 
   const now = new Date();
-  switch (input.status) {
-    case "ACKNOWLEDGED":
-      grievance.acknowledgedAt = now;
-      break;
-    case "RESOLVED":
-      grievance.resolvedAt = now;
-      break;
-    case "CLOSED":
-      grievance.closedAt = now;
-      break;
-  }
+  const nowFinal = graph.stages.find((s) => s.key === target)?.isFinal === true;
 
-  // Each stamp describes how long the case spent in that state, so it is only
-  // meaningful while the case is actually in it. Reopening a resolved or closed
-  // case must clear it, or `getAvgResolutionDays` keeps measuring a case that
-  // is open again.
-  if (input.status !== GrievanceStatus.RESOLVED) {
+  // Legacy timestamps still drive resolution metrics, so they follow the
+  // workflow rather than the old hardcoded enum. Each stamp belongs to exactly
+  // one state and is only meaningful while the complaint is in it — so the stamp
+  // is cleared whenever it leaves. Getting this wrong makes duration metrics
+  // count a reopened case as still resolved.
+  //
+  //   resolvedAt — set on entering RESOLVED, cleared on leaving it
+  //   closedAt   — set on entering any final stage, cleared on leaving one
+  if (target === "RESOLVED") {
+    grievance.resolvedAt = now;
+  } else {
     grievance.resolvedAt = undefined;
   }
-  if (input.status !== GrievanceStatus.CLOSED) {
+
+  if (nowFinal) {
+    grievance.closedAt = now;
+  } else {
     grievance.closedAt = undefined;
   }
 
   await grievance.save();
 
+  const fromLabel = labelForStage(graph, previousStatus);
+  const toLabel = labelForStage(graph, target);
+
   await GrievanceUpdate.create({
     grievanceId,
     type: UpdateType.PUBLIC_UPDATE,
-    content: input.note || `Status changed to ${input.status}`,
+    content: reason || `Status changed to ${toLabel}`,
     authorId: userId,
     authorName: userName,
   });
@@ -313,11 +393,11 @@ export async function updateStatus(
     REJECTED: AuditAction.GRIEVANCE_REJECTED,
   };
   await logGrievanceEvent(
-    actionMap[input.status] || AuditAction.GRIEVANCE_STATUS_CHANGED,
+    actionMap[target] || AuditAction.GRIEVANCE_STATUS_CHANGED,
     grievanceId,
     userId,
     userName,
-    { from: previousStatus, to: input.status },
+    { from: previousStatus, to: target },
   );
 
   if (grievance.primaryAssigneeId) {
@@ -326,7 +406,7 @@ export async function updateStatus(
         recipientId: grievance.primaryAssigneeId.toString(),
         type: "GRIEVANCE_STATUS_CHANGED",
         title: `Grievance ${grievance.referenceCode} status updated`,
-        message: `Status changed from ${previousStatus} to ${input.status}`,
+        message: `Status changed from ${fromLabel} to ${toLabel}`,
         grievanceId: grievance._id.toString(),
         referenceCode: grievance.referenceCode,
       },
@@ -334,6 +414,108 @@ export async function updateStatus(
   }
 
   return grievance;
+}
+
+/**
+ * The moves this actor can take on this complaint right now.
+ *
+ * Returned by the server rather than recomputed in the browser: the same
+ * `availableTransitions` call that authorises a move is what renders the
+ * buttons, so the UI cannot offer something the service would then refuse.
+ */
+export async function getAvailableMoves(
+  grievanceId: string,
+  userId: string,
+  role: string,
+) {
+  const grievance = await Grievance.findById(grievanceId);
+  if (!grievance || grievance.deletedAt) {
+    throw ApiError.notFound("Grievance not found");
+  }
+
+  const graph = toGraph(await loadWorkflowForGrievance(grievance));
+  const label = (key: string) =>
+    graph.stages.find((s) => s.key === key)?.label ?? key;
+
+  // Mirror the assignment check in updateStatus. Showing a staff member moves on
+  // a complaint they cannot actually move would be offering a dead end.
+  if (
+    !isAdminRole(role) &&
+    grievance.primaryAssigneeId?.toString() !== userId &&
+    !grievance.supportingAssignees.some((id) => id.toString() === userId)
+  ) {
+    return [];
+  }
+
+  // An admin is never stuck for want of a configured move. If the graph leaves
+  // them with nothing — including on a final stage with no reopen drawn — say so
+  // rather than showing an empty panel.
+  return availableTransitions(graph, grievance.status, role).map((t) => ({
+    to: t.to,
+    toLabel: label(t.to),
+    actionLabel: t.actionLabel,
+    requiresApproval: t.requiresApproval,
+    requiresReason: t.requiresReason,
+    requiresAttachment: t.requiresAttachment,
+    isReopen: t.isReopen === true,
+  }));
+}
+
+/**
+ * The workflow governing a complaint. Prefers the one pinned at submission so
+ * that editing a workflow cannot change how an existing case is expected to
+ * progress; falls back to resolving by category for complaints predating the
+ * pin.
+ */
+async function loadWorkflowForGrievance(
+  grievance: IGrievance,
+): Promise<IWorkflow> {
+  if (grievance.workflowId) {
+    const pinned = await Workflow.findById(grievance.workflowId);
+    if (pinned) return pinned;
+  }
+
+  const categoryId =
+    grievance.categoryId && typeof grievance.categoryId !== "string"
+      ? String((grievance.categoryId as { _id: unknown })._id)
+      : grievance.categoryId
+        ? String(grievance.categoryId)
+        : null;
+
+  const resolved = await resolveWorkflowForCategory(categoryId);
+  if (!resolved) {
+    // No active workflow means nothing defines the stages this complaint may sit
+    // in. Refusing is the only safe answer: guessing would silently reintroduce
+    // a hardcoded cycle and let a case drift somewhere ungoverned.
+    throw ApiError.badRequest(
+      "No active complaint workflow is configured for this category",
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Whether the complaint's workflow defines a move into `targetStageKey`. Used by
+ * side effects that imply a stage change — assignment — which must not invent a
+ * transition the admin never drew.
+ */
+async function workflowDefinesMove(
+  grievance: IGrievance,
+  targetStageKey: string,
+): Promise<boolean> {
+  try {
+    const graph = toGraph(await loadWorkflowForGrievance(grievance));
+    return graph.transitions.some(
+      (t) => t.from === grievance.status && t.to === targetStageKey,
+    );
+  } catch {
+    // A missing workflow means no edge is defined, which is the same answer.
+    return false;
+  }
+}
+
+function labelForStage(graph: ReturnType<typeof toGraph>, key: string): string {
+  return graph.stages.find((s) => s.key === key)?.label ?? key;
 }
 
 // ─── Assign Grievance ───────────────────────────────────────────────────────
@@ -401,20 +583,13 @@ export async function assignGrievance(
     (id) => new mongoose.Types.ObjectId(id),
   );
 
-  // Assignment implies the case is now ASSIGNED. The transition table has no
-  // SUBMITTED → ASSIGNED edge, so this is deliberately a widening of the graph
-  // rather than an ordinary transition — hence the explicit status list instead
-  // of canTransition(), which would reject it. The two enforcers must agree, or
-  // the status dropdown and the assign button will disagree about what is
-  // reachable.
-  const autoAssignable: GrievanceStatus[] = [
-    GrievanceStatus.SUBMITTED,
-    GrievanceStatus.ACKNOWLEDGED,
-    GrievanceStatus.UNDER_REVIEW,
-  ];
+  // Assignment implies the case is now being worked on. Only do this when the
+  // workflow actually defines that move — an admin is free to build a cycle
+  // with no "Assigned" stage, and forcing one here would invent a stage that the
+  // complaint is then sitting in with no way out.
   const statusBeforeAssignment = grievance.status;
-  if (autoAssignable.includes(grievance.status)) {
-    grievance.status = GrievanceStatus.ASSIGNED;
+  if (await workflowDefinesMove(grievance, "ASSIGNED")) {
+    grievance.status = "ASSIGNED";
   }
 
   await grievance.save();

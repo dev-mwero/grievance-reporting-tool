@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import mongoose, { type Document, Schema } from "mongoose";
-import { GrievanceStatus } from "@/types";
 import {
   type ISoftDeletable,
   softDeleteFields,
@@ -16,7 +15,18 @@ export interface IGrievance extends Document, ISoftDeletable {
   wardName: string;
   categoryName: string;
   description: string;
-  status: GrievanceStatus;
+  /**
+   * A workflow stage key, not a member of the legacy enum. The set of valid keys
+   * is whatever the governing workflow defines, so this is deliberately a free
+   * string and is validated in the service layer against the workflow.
+   */
+  status: string;
+  /**
+   * The workflow that governed this complaint at submission. Pinned so that
+   * later edits to a workflow cannot retroactively change how a case already in
+   * flight is expected to progress.
+   */
+  workflowId?: mongoose.Types.ObjectId;
   primaryAssigneeId?: mongoose.Types.ObjectId;
   supportingAssignees: mongoose.Types.ObjectId[];
   submittedAt: Date;
@@ -66,9 +76,15 @@ const grievanceSchema = new Schema<IGrievance>(
       maxlength: [20000, "Description cannot exceed 20000 characters"],
     },
     status: {
+      // Intentionally not enum-constrained: stage keys are user-defined. Kept
+      // required with no default so a complaint can never be created without an
+      // explicit starting stage from its workflow.
       type: String,
-      enum: Object.values(GrievanceStatus),
-      default: GrievanceStatus.SUBMITTED,
+      required: true,
+    },
+    workflowId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Workflow",
     },
     primaryAssigneeId: {
       type: Schema.Types.ObjectId,
