@@ -25,6 +25,7 @@ import {
   softDeleteRecord,
 } from "./deletion.service";
 import { createNotifications } from "./notification.service";
+import { supersedeForGrievance } from "./transition-requests.service";
 import { availableTransitions } from "./workflow-graph";
 import {
   loadStageLabels,
@@ -277,6 +278,7 @@ export async function updateStatus(
   userId: string,
   userName: string,
   role: string,
+  { exceptRequestId }: { exceptRequestId?: string } = {},
 ) {
   const grievance = await Grievance.findById(grievanceId);
   if (!grievance) {
@@ -413,6 +415,11 @@ export async function updateStatus(
     ]);
   }
 
+  // A complaint that just moved on cannot also be the subject of a pending
+  // proposal from its old stage. Close those out, or the approval queue offers an
+  // admin a move the complaint is no longer eligible for.
+  await supersedeForGrievance(grievanceId, exceptRequestId);
+
   return grievance;
 }
 
@@ -447,10 +454,12 @@ export async function getAvailableMoves(
     return [];
   }
 
-  // An admin is never stuck for want of a configured move. If the graph leaves
-  // them with nothing — including on a final stage with no reopen drawn — say so
-  // rather than showing an empty panel.
-  return availableTransitions(graph, grievance.status, role).map((t) => ({
+  // Include approval-gated moves: staff cannot apply those, but they must be
+  // able to see and propose them. `canApply` is what separates the two, so the
+  // UI can offer "Propose" rather than a button that would be refused.
+  return availableTransitions(graph, grievance.status, role, {
+    includeApprovalGated: true,
+  }).map((t) => ({
     to: t.to,
     toLabel: label(t.to),
     actionLabel: t.actionLabel,
@@ -458,6 +467,7 @@ export async function getAvailableMoves(
     requiresReason: t.requiresReason,
     requiresAttachment: t.requiresAttachment,
     isReopen: t.isReopen === true,
+    canApply: isAdminRole(role) || !t.requiresApproval,
   }));
 }
 

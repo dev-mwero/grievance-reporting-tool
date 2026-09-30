@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   workflowFindById: vi.fn(),
   workflowFind: vi.fn(),
   workflowFindOne: vi.fn(),
+  requestUpdateMany: vi.fn(),
   auditLog: vi.fn(),
   logGrievanceEvent: vi.fn(),
   createNotifications: vi.fn(),
@@ -35,6 +36,11 @@ vi.mock("@/server/models/grievance-assignment.model", () => ({
 }));
 vi.mock("@/server/models/user.model", () => ({
   User: { findById: h.userFindById },
+}));
+// updateStatus supersedes any pending proposal once the complaint moves, so this
+// collection is touched on every successful move.
+vi.mock("@/server/models/grievance-transition-request.model", () => ({
+  TransitionRequest: { updateMany: h.requestUpdateMany },
 }));
 vi.mock("@/server/models/workflow.model", () => ({
   Workflow: {
@@ -145,6 +151,7 @@ beforeEach(() => {
   h.grievanceUpdateCreate.mockResolvedValue({});
   h.logGrievanceEvent.mockResolvedValue(undefined);
   h.createNotifications.mockResolvedValue(undefined);
+  h.requestUpdateMany.mockResolvedValue({});
 });
 
 describe("updateStatus is driven by the workflow, not a hardcoded table", () => {

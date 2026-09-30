@@ -57,6 +57,20 @@ interface GrievanceDetail {
   }>;
 }
 
+/** A staff request to move a complaint, awaiting or past an admin's decision. */
+interface TransitionRequest {
+  _id: string;
+  actionLabel: string;
+  fromStage: string;
+  toStage: string;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN" | "SUPERSEDED";
+  proposedByName: string;
+  reviewedByName?: string;
+  decisionNote?: string;
+  createdAt: string;
+}
+
 /** A move the server says this actor may take right now. */
 interface GrievanceMove {
   to: string;
@@ -66,6 +80,8 @@ interface GrievanceMove {
   requiresReason: boolean;
   requiresAttachment: boolean;
   isReopen: boolean;
+  /** False for a move staff must propose rather than apply. */
+  canApply: boolean;
 }
 
 export default function GrievanceDetailPage() {
@@ -168,6 +184,51 @@ export default function GrievanceDetailPage() {
         err instanceof ApiClientError
           ? err.message
           : "Failed to update status.",
+      ),
+  });
+
+  const { data: requestHistory = [] } = useQuery({
+    queryKey: ["/grievances", id, "transition-requests"],
+    queryFn: async ({ signal }) =>
+      apiGet<TransitionRequest[]>(
+        `/grievances/${id}/transition-requests`,
+        signal,
+      ),
+    enabled: Boolean(id),
+  });
+
+  const pendingRequest = requestHistory.find((r) => r.status === "PENDING");
+
+  const proposeMutation = useMutation({
+    mutationFn: () =>
+      apiPost(`/grievances/${id}/transition-requests`, {
+        to: chosenMove,
+        reason: statusNote,
+      }),
+    onSuccess: () => {
+      setChosenMove("");
+      setStatusNote("");
+      queryClient.invalidateQueries({
+        queryKey: ["/grievances", id, "transition-requests"],
+      });
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiClientError ? err.message : "Failed to send request.",
+      ),
+  });
+
+  const withdrawMutation = useMutation({
+    mutationFn: (requestId: string) =>
+      apiPost(`/transition-requests/${requestId}/withdraw`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/grievances", id, "transition-requests"],
+      });
+    },
+    onError: (err) =>
+      setError(
+        err instanceof ApiClientError ? err.message : "Failed to withdraw.",
       ),
   });
 
@@ -370,10 +431,36 @@ export default function GrievanceDetailPage() {
                     {moves.map((m) => (
                       <option key={m.to} value={m.to}>
                         {m.actionLabel} → {m.toLabel}
+                        {m.canApply ? "" : " (needs approval)"}
                       </option>
                     ))}
                   </Select>
                 </div>
+
+                {pendingRequest && (
+                  <Alert variant="info">
+                    <div className="space-y-2">
+                      <p>
+                        <strong>{pendingRequest.proposedByName}</strong> asked
+                        to {pendingRequest.actionLabel.toLowerCase()} →{" "}
+                        {pendingRequest.toStage.replace(/_/g, " ")}. Awaiting an
+                        admin&apos;s decision.
+                      </p>
+                      {pendingRequest.proposedByName === user?.name && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            withdrawMutation.mutate(pendingRequest._id)
+                          }
+                          disabled={withdrawMutation.isPending}
+                        >
+                          Withdraw my request
+                        </Button>
+                      )}
+                    </div>
+                  </Alert>
+                )}
 
                 {selectedMove?.isReopen && (
                   <Alert variant="info">
@@ -383,9 +470,11 @@ export default function GrievanceDetailPage() {
 
                 <div>
                   <Label htmlFor="status-note">
-                    {selectedMove?.requiresReason
-                      ? "Reason (required)"
-                      : "Reason (optional)"}
+                    {selectedMove?.requiresApproval
+                      ? "Why this move is needed (required)"
+                      : selectedMove?.requiresReason
+                        ? "Reason (required)"
+                        : "Reason (optional)"}
                   </Label>
                   <Textarea
                     id="status-note"
@@ -398,15 +487,34 @@ export default function GrievanceDetailPage() {
 
                 <Button
                   className="w-full"
-                  onClick={() => statusMutation.mutate()}
+                  onClick={() => {
+                    if (selectedMove?.canApply === false) {
+                      proposeMutation.mutate();
+                    } else {
+                      statusMutation.mutate();
+                    }
+                  }}
                   disabled={
                     !chosenMove ||
                     statusMutation.isPending ||
-                    (selectedMove?.requiresReason === true &&
-                      statusNote.trim() === "")
+                    proposeMutation.isPending ||
+                    // A reason is required both where the move asks for one and
+                    // wherever an approval is involved — an admin approving a
+                    // reasonless request has nothing to judge.
+                    (statusNote.trim() === "" &&
+                      (selectedMove?.requiresReason === true ||
+                        selectedMove?.requiresApproval === true)) ||
+                    (pendingRequest !== undefined &&
+                      selectedMove?.canApply === false)
                   }
                 >
-                  {statusMutation.isPending ? "Applying…" : "Apply move"}
+                  {proposeMutation.isPending
+                    ? "Sending…"
+                    : selectedMove?.canApply === false
+                      ? "Send for approval"
+                      : statusMutation.isPending
+                        ? "Applying…"
+                        : "Apply move"}
                 </Button>
               </CardContent>
             </Card>
