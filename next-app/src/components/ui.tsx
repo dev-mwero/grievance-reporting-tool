@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { AlertCircle, CheckCircle2, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, Loader2, X } from "lucide-react";
 import {
   type ButtonHTMLAttributes,
   type HTMLAttributes,
@@ -418,18 +418,27 @@ export function Alert({
   variant = "error",
   children,
 }: {
-  variant?: "error" | "success";
+  variant?: "error" | "success" | "info";
   children: ReactNode;
 }) {
-  const Icon = variant === "error" ? AlertCircle : CheckCircle2;
+  const Icon =
+    variant === "error"
+      ? AlertCircle
+      : variant === "success"
+        ? CheckCircle2
+        : Info;
   return (
     <div
       role="alert"
       className={cn(
         "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
-        variant === "error"
-          ? "border-destructive/30 bg-destructive/5 text-destructive"
-          : "border-emerald-300 bg-emerald-50 text-emerald-800",
+        variant === "error" &&
+          "border-destructive/30 bg-destructive/5 text-destructive",
+        variant === "success" &&
+          "border-emerald-300 bg-emerald-50 text-emerald-800",
+        // Informational: guidance and unsaved-state notices, which are neither a
+        // success to celebrate nor a failure to apologise for.
+        variant === "info" && "border-sky-300 bg-sky-50 text-sky-900",
       )}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />

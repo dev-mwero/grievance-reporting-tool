@@ -19,6 +19,7 @@ export const workflowStageSchema = z.object({
   isFinal: z.boolean(),
   color: z.string().max(50).optional(),
   order: z.number().int().min(0),
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
 });
 
 export type WorkflowStageInput = z.infer<typeof workflowStageSchema>;

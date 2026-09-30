@@ -20,6 +20,12 @@ export interface IWorkflowStage {
   /** Freeform colour token, e.g. "amber". Drives the stage badge. */
   color?: string;
   order: number;
+  /**
+   * Where the admin left this box on the builder canvas. Presentation only —
+   * the cycle does not depend on it, so a stage without a stored position
+   * simply gets laid out automatically.
+   */
+  position?: { x: number; y: number };
 }
 
 /**
@@ -70,6 +76,11 @@ const stageSchema = new Schema<IWorkflowStage>(
     isFinal: { type: Boolean, default: false },
     color: { type: String, trim: true },
     order: { type: Number, required: true },
+    position: {
+      type: { x: Number, y: Number },
+      // Mongoose wants the sub-keys named to persist properly.
+      _id: false,
+    },
   },
   { _id: false },
 );
