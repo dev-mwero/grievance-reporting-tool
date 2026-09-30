@@ -1,8 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Mail, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import {
+  DeleteRowActions,
+  type DeletionScope,
+  DeletionScopeSelect,
+} from "@/components/deletion-controls";
 import {
   Alert,
   Button,
@@ -15,13 +20,7 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
-import {
-  ApiClientError,
-  apiDelete,
-  apiPost,
-  formatApiErrors,
-  queryFn,
-} from "@/lib/api";
+import { apiErrorMessage, apiPost, queryFn } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/utils";
 import { Role } from "@/types";
@@ -34,6 +33,7 @@ interface InvitationRow {
   status: string;
   expiresAt: string;
   createdAt: string;
+  deletedAt?: string;
 }
 
 const roles = Object.values(Role);
@@ -51,6 +51,7 @@ export default function AdminInvitationsPage() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [scope, setScope] = useState<DeletionScope>("active");
   const [form, setForm] = useState({
     email: "",
     name: "",
@@ -62,7 +63,11 @@ export default function AdminInvitationsPage() {
   }>({
     queryKey: [
       "/admin/users/invitations",
-      { status: status || undefined, limit: 50 },
+      {
+        status: status || undefined,
+        limit: 50,
+        deletionScope: scope,
+      },
     ],
     queryFn,
   });
@@ -80,40 +85,26 @@ export default function AdminInvitationsPage() {
       setMessage("Invitation sent.");
       invalidate();
     },
-    onError: (err) =>
-      setError(
-        err instanceof ApiClientError
-          ? err.message || formatApiErrors(err.errors)
-          : "Failed to invite.",
-      ),
+    onError: (err) => setError(apiErrorMessage(err, "Failed to invite.")),
   });
 
   const resend = useMutation({
     mutationFn: (id: string) =>
       apiPost(`/admin/users/invitations/${id}/resend`),
     onSuccess: () => setMessage("Invitation resent."),
-    onError: (err) =>
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to resend.",
-      ),
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => apiDelete(`/admin/users/invitations/${id}`),
-    onSuccess: invalidate,
-    onError: (err) =>
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to delete.",
-      ),
+    onError: (err) => setError(apiErrorMessage(err, "Failed to resend.")),
   });
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Invitations</h1>
-        <Button onClick={() => setOpen((v) => !v)} size="sm">
-          <Plus className="h-4 w-4" /> Invite user
-        </Button>
+        <div className="flex items-center gap-2">
+          <DeletionScopeSelect value={scope} onChange={setScope} />
+          <Button onClick={() => setOpen((v) => !v)} size="sm">
+            <Plus className="h-4 w-4" /> Invite user
+          </Button>
+        </div>
       </div>
 
       {message && <Alert variant="success">{message}</Alert>}
@@ -229,7 +220,12 @@ export default function AdminInvitationsPage() {
                     </tr>
                   )}
                   {invitations.map((inv) => (
-                    <tr key={inv._id} className="hover:bg-muted/30">
+                    <tr
+                      key={inv._id}
+                      className={
+                        inv.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
+                      }
+                    >
                       <td className="px-4 py-3 font-medium flex items-center gap-2">
                         <Mail className="h-4 w-4 text-muted-foreground" />
                         {inv.name}
@@ -241,34 +237,45 @@ export default function AdminInvitationsPage() {
                         {inv.role.replace("_", " ")}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor[inv.status] ?? ""}`}
-                        >
-                          {inv.status}
-                        </span>
+                        {inv.deletedAt ? (
+                          <span className="text-xs font-semibold text-destructive">
+                            Revoked
+                          </span>
+                        ) : (
+                          <span
+                            className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize ${statusColor[inv.status] ?? ""}`}
+                          >
+                            {inv.status}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDate(inv.expiresAt)}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {inv.status === "pending" && (
-                          <>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!inv.deletedAt && inv.status === "pending" && (
                             <Button
                               variant="ghost"
                               size="sm"
+                              title={`Resend invitation to ${inv.email}`}
                               onClick={() => resend.mutate(inv._id)}
                             >
                               <RefreshCw className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => remove.mutate(inv._id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </>
-                        )}
+                          )}
+                          <DeleteRowActions
+                            basePath="/admin/users/invitations"
+                            id={inv._id}
+                            label={inv.email}
+                            deleted={Boolean(inv.deletedAt)}
+                            disabled={inv.status === "accepted"}
+                            disabledReason="An accepted invitation cannot be revoked — delete the account instead"
+                            onDone={invalidate}
+                            onError={setError}
+                            onMessage={setMessage}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}

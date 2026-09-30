@@ -1,7 +1,47 @@
 import { ApiError } from "../api-error";
-import { GrievanceCategory } from "../models/grievance-category.model";
+import {
+  GrievanceCategory,
+  type IGrievanceCategory,
+} from "../models/grievance-category.model";
+import { type DeletionScope, deletionFilter } from "../models/soft-delete";
 import { AuditAction } from "./audit.service";
 import { logCategoryEvent } from "./audit-impl";
+import {
+  type DeletionActor,
+  type DeletionHooks,
+  type DeletionTarget,
+  purgeRecord,
+  restoreRecord,
+  softDeleteRecord,
+} from "./deletion.service";
+
+const target: DeletionTarget<IGrievanceCategory> = {
+  label: "Category",
+  entityType: "GrievanceCategory",
+  model: GrievanceCategory,
+};
+
+const actions = {
+  softDelete: AuditAction.CATEGORY_SOFT_DELETED,
+  restore: AuditAction.CATEGORY_RESTORED,
+  purge: AuditAction.CATEGORY_PURGED,
+};
+
+/**
+ * A soft-deleted record still occupies its unique name, so a create that
+ * collides with one needs a different remedy than a plain duplicate.
+ */
+async function assertNameAvailable(name: string): Promise<void> {
+  const existing = await GrievanceCategory.findOne({ name }).select(
+    "deletedAt",
+  );
+  if (!existing) return;
+  throw ApiError.conflict(
+    existing.deletedAt
+      ? "A category with this name exists but is deleted — restore or permanently delete it first"
+      : "A category with this name already exists",
+  );
+}
 
 // ─── List Categories ────────────────────────────────────────────────────────
 
@@ -10,16 +50,18 @@ export async function listCategories(query: {
   limit: number;
   search?: string;
   isActive?: string;
+  deletionScope?: DeletionScope;
 }) {
-  const { page, limit, search, isActive } = query;
+  const { page, limit, search, isActive, deletionScope } = query;
 
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { ...deletionFilter(deletionScope) };
 
   if (search) filter.name = { $regex: search, $options: "i" };
   if (isActive) filter.isActive = isActive === "true";
 
   const [categories, total] = await Promise.all([
     GrievanceCategory.find(filter)
+      .populate("deletedBy", "name email")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit),
@@ -39,8 +81,17 @@ export async function listCategories(query: {
 
 // ─── Get Category ───────────────────────────────────────────────────────────
 
-export async function getCategoryById(categoryId: string) {
-  const category = await GrievanceCategory.findById(categoryId);
+export async function getCategoryById(
+  categoryId: string,
+  { includeDeleted = false }: { includeDeleted?: boolean } = {},
+) {
+  const filter: Record<string, unknown> = includeDeleted
+    ? {}
+    : deletionFilter();
+  const category = await GrievanceCategory.findOne({
+    _id: categoryId,
+    ...filter,
+  });
   if (!category) {
     throw ApiError.notFound("Category not found");
   }
@@ -53,10 +104,7 @@ export async function createCategory(input: {
   name: string;
   description?: string;
 }) {
-  const existing = await GrievanceCategory.findOne({ name: input.name });
-  if (existing) {
-    throw ApiError.conflict("A category with this name already exists");
-  }
+  await assertNameAvailable(input.name);
 
   const category = await GrievanceCategory.create(input);
 
@@ -82,11 +130,14 @@ export async function updateCategory(
     throw ApiError.notFound("Category not found");
   }
 
+  if (category.deletedAt) {
+    throw ApiError.badRequest(
+      "Cannot edit a deleted category — restore it first",
+    );
+  }
+
   if (input.name && input.name !== category.name) {
-    const existing = await GrievanceCategory.findOne({ name: input.name });
-    if (existing) {
-      throw ApiError.conflict("A category with this name already exists");
-    }
+    await assertNameAvailable(input.name as string);
   }
 
   Object.assign(category, input);
@@ -122,4 +173,37 @@ export async function deactivateCategory(categoryId: string) {
   );
 
   return category;
+}
+
+// ─── Soft Delete / Restore / Purge ──────────────────────────────────────────
+
+const hooks: DeletionHooks<IGrievanceCategory> = {
+  // Hiding a deleted category keeps it off the public submission form without
+  // discarding the flag an admin may have set deliberately.
+  beforeSoftDelete: (doc) => {
+    doc.isActive = false;
+  },
+  beforeRestore: (doc) => {
+    doc.isActive = true;
+  },
+  metadata: (doc) => ({ name: doc.name }),
+};
+
+export async function softDeleteCategory(
+  categoryId: string,
+  actor: DeletionActor,
+  reason?: string,
+) {
+  return softDeleteRecord(target, actions, categoryId, actor, hooks, reason);
+}
+
+export async function restoreCategory(
+  categoryId: string,
+  actor: DeletionActor,
+) {
+  return restoreRecord(target, actions, categoryId, actor, hooks);
+}
+
+export async function purgeCategory(categoryId: string, actor: DeletionActor) {
+  return purgeRecord(target, actions, categoryId, actor, hooks);
 }

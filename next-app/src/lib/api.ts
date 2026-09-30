@@ -141,3 +141,15 @@ export function formatApiErrors(
     .flatMap(([, messages]) => messages)
     .join(" ");
 }
+
+/** Normalise any thrown value into a message safe to render. */
+export function apiErrorMessage(
+  error: unknown,
+  fallback = "Operation failed.",
+): string {
+  if (error instanceof ApiClientError) {
+    return error.message || formatApiErrors(error.errors) || fallback;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}

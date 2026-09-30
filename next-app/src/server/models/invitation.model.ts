@@ -1,7 +1,12 @@
 import mongoose, { type Document, Schema } from "mongoose";
 import { Role } from "@/types";
+import {
+  type ISoftDeletable,
+  softDeleteFields,
+  softDeleteIndex,
+} from "./soft-delete";
 
-export interface IInvitation extends Document {
+export interface IInvitation extends Document, ISoftDeletable {
   email: string;
   name: string;
   phone?: string;
@@ -63,6 +68,7 @@ const invitationSchema = new Schema<IInvitation>(
     acceptedAt: {
       type: Date,
     },
+    ...softDeleteFields,
   },
   {
     timestamps: true,
@@ -70,6 +76,7 @@ const invitationSchema = new Schema<IInvitation>(
 );
 
 invitationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+invitationSchema.index(softDeleteIndex);
 
 export const Invitation =
   (mongoose.models.Invitation as mongoose.Model<IInvitation>) ||

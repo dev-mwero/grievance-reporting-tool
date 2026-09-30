@@ -60,6 +60,12 @@ const navSections = [
     roles: ["ADMIN", "SUPER_ADMIN"],
     items: [
       {
+        href: "/dashboard/admin/grievances",
+        label: "Complaints",
+        icon: FileText,
+        exact: false,
+      },
+      {
         href: "/dashboard/admin/users",
         label: "Users",
         icon: Users,

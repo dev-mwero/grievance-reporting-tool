@@ -1,8 +1,13 @@
 import crypto from "node:crypto";
 import mongoose, { type Document, Schema } from "mongoose";
 import { GrievanceStatus } from "@/types";
+import {
+  type ISoftDeletable,
+  softDeleteFields,
+  softDeleteIndex,
+} from "./soft-delete";
 
-export interface IGrievance extends Document {
+export interface IGrievance extends Document, ISoftDeletable {
   referenceCode: string;
   subCountyId: mongoose.Types.ObjectId;
   wardId: mongoose.Types.ObjectId;
@@ -74,6 +79,7 @@ const grievanceSchema = new Schema<IGrievance>(
     acknowledgedAt: { type: Date },
     resolvedAt: { type: Date },
     closedAt: { type: Date },
+    ...softDeleteFields,
   },
   {
     timestamps: true,
@@ -87,6 +93,7 @@ grievanceSchema.index({ categoryId: 1, status: 1 });
 grievanceSchema.index({ primaryAssigneeId: 1, status: 1 });
 grievanceSchema.index({ supportingAssignees: 1 });
 grievanceSchema.index({ createdAt: -1 });
+grievanceSchema.index(softDeleteIndex);
 
 export const Grievance =
   (mongoose.models.Grievance as mongoose.Model<IGrievance>) ||

@@ -4,6 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Power } from "lucide-react";
 import { useState } from "react";
 import {
+  DeleteRowActions,
+  type DeletionScope,
+  DeletionScopeSelect,
+} from "@/components/deletion-controls";
+import {
   Alert,
   Button,
   Card,
@@ -15,13 +20,7 @@ import {
   Spinner,
   Textarea,
 } from "@/components/ui";
-import {
-  ApiClientError,
-  apiPatch,
-  apiPost,
-  formatApiErrors,
-  queryFn,
-} from "@/lib/api";
+import { apiErrorMessage, apiPatch, apiPost, queryFn } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
 interface CategoryRow {
@@ -29,6 +28,8 @@ interface CategoryRow {
   name: string;
   description?: string;
   isActive: boolean;
+  deletedAt?: string;
+  deleteReason?: string;
   createdAt: string;
 }
 
@@ -38,11 +39,12 @@ export default function AdminCategoriesPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [scope, setScope] = useState<DeletionScope>("active");
 
   const [form, setForm] = useState({ name: "", description: "" });
 
   const { data, isLoading } = useQuery<{ categories: CategoryRow[] }>({
-    queryKey: ["/admin/categories", { limit: 100, isActive: "true" }],
+    queryKey: ["/admin/categories", { limit: 100, deletionScope: scope }],
     queryFn,
   });
   const categories = data?.categories ?? [];
@@ -51,12 +53,7 @@ export default function AdminCategoriesPage() {
     queryClient.invalidateQueries({ queryKey: ["/admin/categories"] });
   };
 
-  const showErr = (err: unknown) =>
-    setError(
-      err instanceof ApiClientError
-        ? err.message || formatApiErrors(err.errors)
-        : "Operation failed.",
-    );
+  const showErr = (err: unknown) => setError(apiErrorMessage(err));
 
   const create = useMutation({
     mutationFn: () => apiPost("/admin/categories", form),
@@ -97,11 +94,14 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">Categories</h1>
-        <Button onClick={() => setCreateOpen((v) => !v)} size="sm">
-          <Plus className="h-4 w-4" /> Add category
-        </Button>
+        <div className="flex items-center gap-2">
+          <DeletionScopeSelect value={scope} onChange={setScope} />
+          <Button onClick={() => setCreateOpen((v) => !v)} size="sm">
+            <Plus className="h-4 w-4" /> Add category
+          </Button>
+        </div>
       </div>
 
       {message && <Alert variant="success">{message}</Alert>}
@@ -166,7 +166,7 @@ export default function AdminCategoriesPage() {
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Description</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 hidden md:table-cell">Created</th>
+                    <th className="hidden px-4 py-3 md:table-cell">Created</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -182,7 +182,12 @@ export default function AdminCategoriesPage() {
                     </tr>
                   )}
                   {categories.map((c) => (
-                    <tr key={c._id} className="hover:bg-muted/30">
+                    <tr
+                      key={c._id}
+                      className={
+                        c.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
+                      }
+                    >
                       <td className="px-4 py-3 font-medium">
                         {editId === c._id ? (
                           <div className="flex items-center gap-2">
@@ -213,47 +218,81 @@ export default function AdminCategoriesPage() {
                           c.name
                         )}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">
+                      <td className="max-w-xs truncate px-4 py-3 text-muted-foreground">
                         {c.description ?? "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-semibold ${c.isActive ? "text-emerald-600" : "text-destructive"}`}
-                        >
-                          {c.isActive ? "Active" : "Inactive"}
-                        </span>
+                        {c.deletedAt ? (
+                          <span
+                            className="text-xs font-semibold text-destructive"
+                            title={
+                              c.deleteReason
+                                ? `Reason: ${c.deleteReason}`
+                                : undefined
+                            }
+                          >
+                            Deleted
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-xs font-semibold ${c.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
+                          >
+                            {c.isActive ? "Active" : "Inactive"}
+                          </span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
+                      <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
                         {formatDate(c.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEditId(c._id);
-                            setForm({
-                              name: c.name,
-                              description: c.description ?? "",
-                            });
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            toggleActive.mutate({
-                              id: c._id,
-                              isActive: c.isActive,
-                            })
-                          }
-                        >
-                          <Power
-                            className={`h-4 w-4 ${c.isActive ? "text-destructive" : "text-emerald-600"}`}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!c.deletedAt && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={`Edit ${c.name}`}
+                                onClick={() => {
+                                  setEditId(c._id);
+                                  setForm({
+                                    name: c.name,
+                                    description: c.description ?? "",
+                                  });
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={
+                                  c.isActive
+                                    ? `Deactivate ${c.name}`
+                                    : `Activate ${c.name}`
+                                }
+                                onClick={() =>
+                                  toggleActive.mutate({
+                                    id: c._id,
+                                    isActive: c.isActive,
+                                  })
+                                }
+                              >
+                                <Power
+                                  className={`h-4 w-4 ${c.isActive ? "text-destructive" : "text-emerald-600"}`}
+                                />
+                              </Button>
+                            </>
+                          )}
+                          <DeleteRowActions
+                            basePath="/admin/categories"
+                            id={c._id}
+                            label={c.name}
+                            deleted={Boolean(c.deletedAt)}
+                            onDone={invalidate}
+                            onError={setError}
+                            onMessage={setMessage}
                           />
-                        </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -3,12 +3,26 @@ import { after } from "next/server";
 import { canTransition, type GrievanceStatus } from "@/types";
 import { ApiError } from "../api-error";
 import { sendGrievanceAssignedEmail } from "../email";
-import { Grievance } from "../models/grievance.model";
+import { Grievance, type IGrievance } from "../models/grievance.model";
 import { GrievanceAssignment } from "../models/grievance-assignment.model";
+import { GrievanceCategory } from "../models/grievance-category.model";
 import { GrievanceUpdate, UpdateType } from "../models/grievance-update.model";
+import { Notification } from "../models/notification.model";
+import { type DeletionScope, deletionFilter } from "../models/soft-delete";
+import { SubCounty } from "../models/sub-county.model";
 import { User } from "../models/user.model";
+import { Ward } from "../models/ward.model";
+import { sanitizeRichText } from "../sanitize";
 import { AuditAction } from "./audit.service";
 import { logGrievanceEvent } from "./audit-impl";
+import {
+  type DeletionActor,
+  type DeletionHooks,
+  type DeletionTarget,
+  purgeRecord,
+  restoreRecord,
+  softDeleteRecord,
+} from "./deletion.service";
 import { createNotifications } from "./notification.service";
 
 // ─── List Grievances ────────────────────────────────────────────────────────
@@ -24,6 +38,7 @@ export async function listGrievances(query: {
   search?: string;
   dateFrom?: string;
   dateTo?: string;
+  deletionScope?: DeletionScope;
 }) {
   const {
     page,
@@ -36,9 +51,10 @@ export async function listGrievances(query: {
     search,
     dateFrom,
     dateTo,
+    deletionScope,
   } = query;
 
-  const filter: Record<string, unknown> = {};
+  const filter: Record<string, unknown> = { ...deletionFilter(deletionScope) };
 
   if (status) filter.status = status;
   if (subCountyId) filter.subCountyId = subCountyId;
@@ -74,6 +90,7 @@ export async function listGrievances(query: {
     Grievance.find(filter)
       .populate("categoryId", "name")
       .populate("primaryAssigneeId", "name email")
+      .populate("deletedBy", "name email")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit),
@@ -93,12 +110,19 @@ export async function listGrievances(query: {
 
 // ─── Get Grievance Detail ───────────────────────────────────────────────────
 
-export async function getGrievanceById(grievanceId: string) {
-  const grievance = await Grievance.findById(grievanceId)
+export async function getGrievanceById(
+  grievanceId: string,
+  { includeDeleted = false }: { includeDeleted?: boolean } = {},
+) {
+  const grievance = await Grievance.findOne({
+    _id: grievanceId,
+    ...(includeDeleted ? {} : deletionFilter()),
+  })
     .populate("subCountyId", "name code")
     .populate("wardId", "name code")
     .populate("categoryId", "name description")
-    .populate("primaryAssigneeId", "name email title");
+    .populate("primaryAssigneeId", "name email title")
+    .populate("deletedBy", "name email");
 
   if (!grievance) {
     throw ApiError.notFound("Grievance not found");
@@ -119,6 +143,108 @@ export async function getGrievanceById(grievanceId: string) {
   return { grievance, updates, assignments };
 }
 
+// ─── Admin Edit ─────────────────────────────────────────────────────────────
+
+/**
+ * Amend a submitted grievance. The public submission endpoint is anonymous
+ * and immutable, so this exists for admins correcting misfiled complaints.
+ *
+ * The denormalised `subCountyName` / `wardName` / `categoryName` snapshots are
+ * re-derived on every relevant change — they are what keeps historical
+ * complaints readable after their category or ward is later removed.
+ */
+export async function updateGrievance(
+  grievanceId: string,
+  input: {
+    subCountyId?: string;
+    wardId?: string;
+    categoryId?: string;
+    description?: string;
+  },
+  userId: string,
+  userName: string,
+) {
+  const grievance = await Grievance.findById(grievanceId);
+  if (!grievance) {
+    throw ApiError.notFound("Grievance not found");
+  }
+
+  if (grievance.deletedAt) {
+    throw ApiError.badRequest(
+      "Cannot edit a deleted grievance — restore it first",
+    );
+  }
+
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+  if (input.subCountyId || input.wardId) {
+    const subCountyId = input.subCountyId ?? grievance.subCountyId.toString();
+    const subCounty = await SubCounty.findById(subCountyId);
+    if (!subCounty) {
+      throw ApiError.badRequest("Sub-County not found");
+    }
+
+    const wardId = input.wardId ?? grievance.wardId.toString();
+    const ward = await Ward.findById(wardId);
+    if (!ward) {
+      throw ApiError.badRequest("Ward not found");
+    }
+    if (ward.subCountyId.toString() !== subCountyId) {
+      throw ApiError.badRequest(
+        "Ward does not belong to the selected Sub-County",
+      );
+    }
+
+    if (input.subCountyId) {
+      changes.subCountyId = {
+        from: grievance.subCountyName,
+        to: subCounty.name,
+      };
+      grievance.subCountyId = subCounty._id;
+      grievance.subCountyName = subCounty.name;
+    }
+
+    if (input.wardId) {
+      changes.wardId = { from: grievance.wardName, to: ward.name };
+      grievance.wardId = ward._id;
+      grievance.wardName = ward.name;
+    }
+  }
+
+  if (input.categoryId) {
+    const category = await GrievanceCategory.findById(input.categoryId);
+    if (!category) {
+      throw ApiError.badRequest("Category not found");
+    }
+    changes.categoryId = {
+      from: grievance.categoryName,
+      to: category.name,
+    };
+    grievance.categoryId = category._id;
+    grievance.categoryName = category.name;
+  }
+
+  if (
+    input.description !== undefined &&
+    input.description !== grievance.description
+  ) {
+    grievance.description = sanitizeRichText(input.description);
+    changes.description = { from: "original", to: "amended" };
+  }
+
+  await grievance.save();
+
+  await logGrievanceEvent(
+    AuditAction.GRIEVANCE_UPDATED,
+    grievanceId,
+    userId,
+    userName,
+    { changes },
+  );
+
+  return grievance;
+}
+
 // ─── Update Status ──────────────────────────────────────────────────────────
 
 export async function updateStatus(
@@ -130,6 +256,11 @@ export async function updateStatus(
   const grievance = await Grievance.findById(grievanceId);
   if (!grievance) {
     throw ApiError.notFound("Grievance not found");
+  }
+  if (grievance.deletedAt) {
+    throw ApiError.badRequest(
+      "Cannot change the status of a deleted grievance — restore it first",
+    );
   }
 
   if (!canTransition(grievance.status, input.status)) {
@@ -205,6 +336,11 @@ export async function assignGrievance(
   const grievance = await Grievance.findById(grievanceId);
   if (!grievance) {
     throw ApiError.notFound("Grievance not found");
+  }
+  if (grievance.deletedAt) {
+    throw ApiError.badRequest(
+      "Cannot assign a deleted grievance — restore it first",
+    );
   }
 
   const primaryUser = await User.findById(input.primaryAssigneeId);
@@ -340,6 +476,11 @@ export async function addUpdate(
   if (!grievance) {
     throw ApiError.notFound("Grievance not found");
   }
+  if (grievance.deletedAt) {
+    throw ApiError.badRequest(
+      "Cannot add updates to a deleted grievance — restore it first",
+    );
+  }
 
   const update = await GrievanceUpdate.create({
     grievanceId,
@@ -361,15 +502,90 @@ export async function addUpdate(
   return update;
 }
 
+// ─── Soft Delete / Restore / Purge ──────────────────────────────────────────
+
+const grievanceTarget: DeletionTarget<IGrievance> = {
+  label: "Grievance",
+  entityType: "Grievance",
+  model: Grievance,
+};
+
+const grievanceActions = {
+  softDelete: AuditAction.GRIEVANCE_SOFT_DELETED,
+  restore: AuditAction.GRIEVANCE_RESTORED,
+  purge: AuditAction.GRIEVANCE_PURGED,
+};
+
+const grievanceHooks: DeletionHooks<IGrievance> = {
+  // Updates, assignments and notifications have no meaning without the
+  // grievance they describe, so a purge takes them with it. A soft delete
+  // keeps everything intact and simply hides the complaint from every read.
+  cascadePurge: async (doc) => {
+    const grievanceId = doc._id;
+    await GrievanceUpdate.deleteMany({ grievanceId });
+    await GrievanceAssignment.deleteMany({ grievanceId });
+    await Notification.deleteMany({ grievanceId });
+  },
+  metadata: (doc) => ({
+    referenceCode: doc.referenceCode,
+    status: doc.status,
+    categoryName: doc.categoryName,
+  }),
+};
+
+export async function softDeleteGrievance(
+  grievanceId: string,
+  actor: DeletionActor,
+  reason?: string,
+) {
+  return softDeleteRecord(
+    grievanceTarget,
+    grievanceActions,
+    grievanceId,
+    actor,
+    grievanceHooks,
+    reason,
+  );
+}
+
+export async function restoreGrievance(
+  grievanceId: string,
+  actor: DeletionActor,
+) {
+  return restoreRecord(
+    grievanceTarget,
+    grievanceActions,
+    grievanceId,
+    actor,
+    grievanceHooks,
+  );
+}
+
+export async function purgeGrievance(
+  grievanceId: string,
+  actor: DeletionActor,
+) {
+  return purgeRecord(
+    grievanceTarget,
+    grievanceActions,
+    grievanceId,
+    actor,
+    grievanceHooks,
+  );
+}
+
 // ─── Get Staff Dashboard Stats ──────────────────────────────────────────────
 
 export async function getDashboardStats(userId: string) {
+  const notDeletedFilter = deletionFilter();
   const [myAssigned, totalOpen, recentUpdates] = await Promise.all([
     Grievance.countDocuments({
+      ...notDeletedFilter,
       primaryAssigneeId: userId,
       status: { $nin: ["CLOSED", "REJECTED"] },
     }),
     Grievance.countDocuments({
+      ...notDeletedFilter,
       status: { $nin: ["CLOSED", "REJECTED"] },
     }),
     GrievanceUpdate.find({ authorId: userId })

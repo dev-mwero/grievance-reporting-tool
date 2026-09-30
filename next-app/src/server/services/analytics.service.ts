@@ -2,6 +2,7 @@ import { GrievanceStatus, Role } from "@/types";
 import { AuditLog } from "../models/audit-log.model";
 import { Grievance } from "../models/grievance.model";
 import { GrievanceCategory } from "../models/grievance-category.model";
+import { deletionFilter } from "../models/soft-delete";
 import { SubCounty } from "../models/sub-county.model";
 import { User } from "../models/user.model";
 import type {
@@ -36,13 +37,17 @@ export async function getOverview(query: AnalyticsQuery) {
     Grievance.countDocuments({ ...dateFilter, status: "CLOSED" }),
     Grievance.countDocuments({ ...dateFilter, status: "REJECTED" }),
     getAvgResolutionDays(dateFilter),
-    User.countDocuments({ role: { $ne: Role.SUPER_ADMIN } }),
+    User.countDocuments({
+      role: { $ne: Role.SUPER_ADMIN },
+      ...deletionFilter(),
+    }),
     User.countDocuments({
       role: { $ne: Role.SUPER_ADMIN },
       isActive: true,
+      ...deletionFilter(),
     }),
-    GrievanceCategory.countDocuments({ isActive: true }),
-    SubCounty.countDocuments({ isActive: true }),
+    GrievanceCategory.countDocuments({ isActive: true, ...deletionFilter() }),
+    SubCounty.countDocuments({ isActive: true, ...deletionFilter() }),
   ]);
 
   return {
@@ -250,12 +255,14 @@ function buildDateFilter(
   dateFrom?: string,
   dateTo?: string,
 ): Record<string, unknown> {
-  if (!dateFrom && !dateTo) return {};
-  const filter: Record<string, unknown> = { submittedAt: {} };
-  if (dateFrom)
-    (filter.submittedAt as Record<string, unknown>).$gte = new Date(dateFrom);
-  if (dateTo)
-    (filter.submittedAt as Record<string, unknown>).$lte = new Date(dateTo);
+  // Every grievance metric is scoped to live records: a soft-deleted
+  // complaint must disappear from the dashboard and the reports with it.
+  const filter: Record<string, unknown> = { ...deletionFilter() };
+  if (!dateFrom && !dateTo) return filter;
+  const submittedAt: Record<string, unknown> = {};
+  if (dateFrom) submittedAt.$gte = new Date(dateFrom);
+  if (dateTo) submittedAt.$lte = new Date(dateTo);
+  filter.submittedAt = submittedAt;
   return filter;
 }
 

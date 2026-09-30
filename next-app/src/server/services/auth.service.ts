@@ -4,6 +4,7 @@ import { ApiError } from "../api-error";
 import { sendInvitationEmail, sendPasswordResetEmail } from "../email";
 import { Invitation } from "../models/invitation.model";
 import { PasswordResetToken } from "../models/password-reset-token.model";
+import { deletionFilter } from "../models/soft-delete";
 import { User } from "../models/user.model";
 import {
   generateAccessToken,
@@ -55,6 +56,10 @@ export async function login(input: { email: string; password: string }) {
     throw ApiError.forbidden(
       "Account is deactivated. Contact an administrator.",
     );
+  }
+
+  if (user.deletedAt) {
+    throw ApiError.forbidden("This account has been deleted");
   }
 
   const isPasswordValid = await bcrypt.compare(
@@ -110,6 +115,10 @@ export async function refreshAccessToken(refreshToken: string) {
 
   if (!user.isActive) {
     throw ApiError.forbidden("Account is deactivated");
+  }
+
+  if (user.deletedAt) {
+    throw ApiError.forbidden("This account has been deleted");
   }
 
   const accessToken = generateAccessToken({
@@ -168,7 +177,12 @@ export async function switchRole(userId: string, targetRole: Role) {
 // ─── Forgot Password ────────────────────────────────────────────────────────
 
 export async function forgotPassword(input: { email: string }) {
-  const user = await User.findOne({ email: input.email.toLowerCase() });
+  // A deleted account is treated as absent: the response is deliberately
+  // non-revealing, and no reset mail is sent to a removed user.
+  const user = await User.findOne({
+    email: input.email.toLowerCase(),
+    ...deletionFilter(),
+  });
   if (!user) {
     return { message: "If the email exists, a reset link has been sent" };
   }
@@ -215,6 +229,10 @@ export async function resetPassword(input: {
     throw ApiError.notFound("User not found");
   }
 
+  if (user.deletedAt) {
+    throw ApiError.badRequest("This account has been deleted");
+  }
+
   user.passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
   await user.save();
 
@@ -237,6 +255,7 @@ async function findPendingInvitation(rawToken: string) {
   const invitation = await Invitation.findOne({
     token: hashToken(rawToken),
     acceptedAt: { $exists: false },
+    ...deletionFilter(),
   });
 
   if (!invitation) {
@@ -279,7 +298,11 @@ export async function acceptInvitation(input: {
 
   const existingUser = await User.findOne({ email: invitation.email });
   if (existingUser) {
-    throw ApiError.conflict("An account with this email already exists");
+    throw ApiError.conflict(
+      existingUser.deletedAt
+        ? "An account with this email exists but is deleted — contact an administrator"
+        : "An account with this email already exists",
+    );
   }
 
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Role } from "@/types";
+import { deletionScopeSchema } from "./common";
 
 export const listUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -7,6 +8,7 @@ export const listUsersQuerySchema = z.object({
   search: z.string().max(200).optional(),
   role: z.nativeEnum(Role).optional(),
   isActive: z.enum(["true", "false"]).optional(),
+  deletionScope: deletionScopeSchema,
 });
 
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
@@ -63,6 +65,7 @@ export const listInvitationsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(["pending", "accepted", "expired"]).optional(),
+  deletionScope: deletionScopeSchema,
 });
 
 export type ListInvitationsQuery = z.infer<typeof listInvitationsQuerySchema>;

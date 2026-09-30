@@ -1,6 +1,11 @@
 import mongoose, { type Document, Schema } from "mongoose";
+import {
+  type ISoftDeletable,
+  softDeleteFields,
+  softDeleteIndex,
+} from "./soft-delete";
 
-export interface IGrievanceCategory extends Document {
+export interface IGrievanceCategory extends Document, ISoftDeletable {
   name: string;
   description?: string;
   isActive: boolean;
@@ -26,6 +31,7 @@ const grievanceCategorySchema = new Schema<IGrievanceCategory>(
       type: Boolean,
       default: true,
     },
+    ...softDeleteFields,
   },
   {
     timestamps: true,
@@ -33,6 +39,7 @@ const grievanceCategorySchema = new Schema<IGrievanceCategory>(
 );
 
 grievanceCategorySchema.index({ isActive: 1 });
+grievanceCategorySchema.index(softDeleteIndex);
 
 export const GrievanceCategory =
   (mongoose.models.GrievanceCategory as mongoose.Model<IGrievanceCategory>) ||

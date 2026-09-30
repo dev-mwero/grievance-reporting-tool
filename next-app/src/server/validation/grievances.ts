@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { GrievanceStatus } from "@/types";
+import { deletionScopeSchema } from "./common";
 
 export const listGrievancesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -12,9 +13,33 @@ export const listGrievancesQuerySchema = z.object({
   search: z.string().max(200).optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
+  deletionScope: deletionScopeSchema,
 });
 
 export type ListGrievancesQuery = z.infer<typeof listGrievancesQuerySchema>;
+
+/**
+ * Administrative amendment of a submitted grievance. Every field is optional
+ * so an admin can correct one detail without restating the whole complaint.
+ */
+export const adminUpdateGrievanceSchema = z
+  .object({
+    subCountyId: z.string().min(1, "Sub-County is required").optional(),
+    wardId: z.string().min(1, "Ward is required").optional(),
+    categoryId: z.string().min(1, "Category is required").optional(),
+    description: z
+      .string()
+      .min(1, "Description is required")
+      .max(20000, "Description cannot exceed 20000 characters")
+      .optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "Provide at least one field to update",
+  });
+
+export type AdminUpdateGrievanceInput = z.infer<
+  typeof adminUpdateGrievanceSchema
+>;
 
 export const updateStatusSchema = z.object({
   status: z.nativeEnum(GrievanceStatus),

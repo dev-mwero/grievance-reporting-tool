@@ -4,6 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Power } from "lucide-react";
 import { useState } from "react";
 import {
+  DeleteRowActions,
+  type DeletionScope,
+  DeletionScopeSelect,
+} from "@/components/deletion-controls";
+import {
   Alert,
   Button,
   Card,
@@ -15,19 +20,14 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
-import {
-  ApiClientError,
-  apiPatch,
-  apiPost,
-  formatApiErrors,
-  queryFn,
-} from "@/lib/api";
+import { apiErrorMessage, apiPatch, apiPost, queryFn } from "@/lib/api";
 
 interface SubCountyRow {
   _id: string;
   name: string;
   code: string;
   isActive: boolean;
+  deletedAt?: string;
 }
 
 interface WardRow {
@@ -35,6 +35,7 @@ interface WardRow {
   name: string;
   code: string;
   isActive: boolean;
+  deletedAt?: string;
   subCountyId: { _id: string; name: string } | null;
 }
 
@@ -43,10 +44,12 @@ type Tab = "sub-counties" | "wards";
 export default function AdminLocationsPage() {
   const [tab, setTab] = useState<Tab>("sub-counties");
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold tracking-tight">Locations</h1>
+      {message && <Alert variant="success">{message}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
       <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
         {(["sub-counties", "wards"] as Tab[]).map((t) => (
@@ -65,9 +68,9 @@ export default function AdminLocationsPage() {
         ))}
       </div>
       {tab === "sub-counties" ? (
-        <SubCountiesPanel onError={setError} />
+        <SubCountiesPanel onError={setError} onMessage={setMessage} />
       ) : (
-        <WardsPanel onError={setError} />
+        <WardsPanel onError={setError} onMessage={setMessage} />
       )}
     </div>
   );
@@ -77,17 +80,20 @@ export default function AdminLocationsPage() {
 
 function SubCountiesPanel({
   onError,
+  onMessage,
 }: {
   onError: (msg: string | null) => void;
+  onMessage: (msg: string | null) => void;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [scope, setScope] = useState<DeletionScope>("active");
   const [form, setForm] = useState({ name: "", code: "" });
   const [editForm, setEditForm] = useState({ name: "", code: "" });
 
   const { data, isLoading } = useQuery<{ subCounties: SubCountyRow[] }>({
-    queryKey: ["/admin/sub-counties", { limit: 200, isActive: "true" }],
+    queryKey: ["/admin/sub-counties", { limit: 200, deletionScope: scope }],
     queryFn,
   });
   const rows = data?.subCounties ?? [];
@@ -95,12 +101,7 @@ function SubCountiesPanel({
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["/admin/sub-counties"] });
 
-  const showErr = (err: unknown) =>
-    onError(
-      err instanceof ApiClientError
-        ? err.message || formatApiErrors(err.errors)
-        : "Operation failed.",
-    );
+  const showErr = (err: unknown) => onError(apiErrorMessage(err));
 
   const create = useMutation({
     mutationFn: () => apiPost("/admin/sub-counties", form),
@@ -134,7 +135,8 @@ function SubCountiesPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <DeletionScopeSelect value={scope} onChange={setScope} />
         <Button onClick={() => setOpen((v) => !v)} size="sm">
           <Plus className="h-4 w-4" /> Add sub-county
         </Button>
@@ -196,7 +198,12 @@ function SubCountiesPanel({
                 </thead>
                 <tbody className="divide-y">
                   {rows.map((s) => (
-                    <tr key={s._id} className="hover:bg-muted/30">
+                    <tr
+                      key={s._id}
+                      className={
+                        s.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
+                      }
+                    >
                       <td className="px-4 py-3 font-medium">
                         {editId === s._id ? (
                           <Input
@@ -224,11 +231,17 @@ function SubCountiesPanel({
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-semibold ${s.isActive ? "text-emerald-600" : "text-destructive"}`}
-                        >
-                          {s.isActive ? "Active" : "Inactive"}
-                        </span>
+                        {s.deletedAt ? (
+                          <span className="text-xs font-semibold text-destructive">
+                            Deleted
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-xs font-semibold ${s.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
+                          >
+                            {s.isActive ? "Active" : "Inactive"}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {editId === s._id ? (
@@ -252,30 +265,49 @@ function SubCountiesPanel({
                           </>
                         ) : (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setEditId(s._id);
-                                setEditForm({ name: s.name, code: s.code });
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                toggle.mutate({
-                                  id: s._id,
-                                  isActive: s.isActive,
-                                })
-                              }
-                            >
-                              <Power
-                                className={`h-4 w-4 ${s.isActive ? "text-destructive" : "text-emerald-600"}`}
-                              />
-                            </Button>
+                            {!s.deletedAt && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title={`Edit ${s.name}`}
+                                  onClick={() => {
+                                    setEditId(s._id);
+                                    setEditForm({ name: s.name, code: s.code });
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title={
+                                    s.isActive
+                                      ? `Deactivate ${s.name}`
+                                      : `Activate ${s.name}`
+                                  }
+                                  onClick={() =>
+                                    toggle.mutate({
+                                      id: s._id,
+                                      isActive: s.isActive,
+                                    })
+                                  }
+                                >
+                                  <Power
+                                    className={`h-4 w-4 ${s.isActive ? "text-destructive" : "text-emerald-600"}`}
+                                  />
+                                </Button>
+                              </>
+                            )}
+                            <DeleteRowActions
+                              basePath="/admin/sub-counties"
+                              id={s._id}
+                              label={s.name}
+                              deleted={Boolean(s.deletedAt)}
+                              onDone={invalidate}
+                              onError={showErr}
+                              onMessage={onMessage}
+                            />
                           </>
                         )}
                       </td>
@@ -303,11 +335,18 @@ function SubCountiesPanel({
 
 // ─── Wards ──────────────────────────────────────────────────────────────────
 
-function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
+function WardsPanel({
+  onError,
+  onMessage,
+}: {
+  onError: (msg: string | null) => void;
+  onMessage: (msg: string | null) => void;
+}) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [subCountyId, setSubCountyId] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
+  const [scope, setScope] = useState<DeletionScope>("active");
   const [form, setForm] = useState({ name: "", code: "", subCountyId: "" });
   const [editForm, setEditForm] = useState({
     name: "",
@@ -315,6 +354,8 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
     subCountyId: "",
   });
 
+  // The parent picker only ever lists live sub-counties: a ward cannot be moved
+  // into one that is deleted or deactivated.
   const subCounties = useQuery<{ subCounties: SubCountyRow[] }>({
     queryKey: ["/admin/sub-counties", { limit: 200, isActive: "true" }],
     queryFn,
@@ -323,7 +364,11 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
   const wards = useQuery<{ wards: WardRow[] }>({
     queryKey: [
       "/admin/wards",
-      { limit: 500, subCountyId: subCountyId || undefined },
+      {
+        limit: 500,
+        subCountyId: subCountyId || undefined,
+        deletionScope: scope,
+      },
     ],
     queryFn,
   });
@@ -333,12 +378,7 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
     queryClient.invalidateQueries({ queryKey: ["/admin/wards"] });
   };
 
-  const showErr = (err: unknown) =>
-    onError(
-      err instanceof ApiClientError
-        ? err.message || formatApiErrors(err.errors)
-        : "Operation failed.",
-    );
+  const showErr = (err: unknown) => onError(apiErrorMessage(err));
 
   const create = useMutation({
     mutationFn: () => apiPost("/admin/wards", form),
@@ -387,9 +427,12 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
             </option>
           ))}
         </Select>
-        <Button onClick={() => setOpen((v) => !v)} size="sm">
-          <Plus className="h-4 w-4" /> Add ward
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <DeletionScopeSelect value={scope} onChange={setScope} />
+          <Button onClick={() => setOpen((v) => !v)} size="sm">
+            <Plus className="h-4 w-4" /> Add ward
+          </Button>
+        </div>
       </div>
 
       {open && (
@@ -466,7 +509,12 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
                 </thead>
                 <tbody className="divide-y">
                   {rows.map((w) => (
-                    <tr key={w._id} className="hover:bg-muted/30">
+                    <tr
+                      key={w._id}
+                      className={
+                        w.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
+                      }
+                    >
                       <td className="px-4 py-3 font-medium">
                         {editId === w._id ? (
                           <Input
@@ -517,11 +565,17 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-semibold ${w.isActive ? "text-emerald-600" : "text-destructive"}`}
-                        >
-                          {w.isActive ? "Active" : "Inactive"}
-                        </span>
+                        {w.deletedAt ? (
+                          <span className="text-xs font-semibold text-destructive">
+                            Deleted
+                          </span>
+                        ) : (
+                          <span
+                            className={`text-xs font-semibold ${w.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
+                          >
+                            {w.isActive ? "Active" : "Inactive"}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {editId === w._id ? (
@@ -545,34 +599,53 @@ function WardsPanel({ onError }: { onError: (msg: string | null) => void }) {
                           </>
                         ) : (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setEditId(w._id);
-                                setEditForm({
-                                  name: w.name,
-                                  code: w.code,
-                                  subCountyId: w.subCountyId?._id ?? "",
-                                });
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                toggle.mutate({
-                                  id: w._id,
-                                  isActive: w.isActive,
-                                })
-                              }
-                            >
-                              <Power
-                                className={`h-4 w-4 ${w.isActive ? "text-destructive" : "text-emerald-600"}`}
-                              />
-                            </Button>
+                            {!w.deletedAt && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title={`Edit ${w.name}`}
+                                  onClick={() => {
+                                    setEditId(w._id);
+                                    setEditForm({
+                                      name: w.name,
+                                      code: w.code,
+                                      subCountyId: w.subCountyId?._id ?? "",
+                                    });
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title={
+                                    w.isActive
+                                      ? `Deactivate ${w.name}`
+                                      : `Activate ${w.name}`
+                                  }
+                                  onClick={() =>
+                                    toggle.mutate({
+                                      id: w._id,
+                                      isActive: w.isActive,
+                                    })
+                                  }
+                                >
+                                  <Power
+                                    className={`h-4 w-4 ${w.isActive ? "text-destructive" : "text-emerald-600"}`}
+                                  />
+                                </Button>
+                              </>
+                            )}
+                            <DeleteRowActions
+                              basePath="/admin/wards"
+                              id={w._id}
+                              label={w.name}
+                              deleted={Boolean(w.deletedAt)}
+                              onDone={invalidate}
+                              onError={showErr}
+                              onMessage={onMessage}
+                            />
                           </>
                         )}
                       </td>

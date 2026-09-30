@@ -4,6 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Power } from "lucide-react";
 import { useState } from "react";
 import {
+  DeleteRowActions,
+  type DeletionScope,
+  DeletionScopeSelect,
+} from "@/components/deletion-controls";
+import {
   Alert,
   Button,
   Card,
@@ -16,13 +21,7 @@ import {
   Select,
   Spinner,
 } from "@/components/ui";
-import {
-  ApiClientError,
-  apiPatch,
-  apiPost,
-  formatApiErrors,
-  queryFn,
-} from "@/lib/api";
+import { apiErrorMessage, apiPatch, apiPost, queryFn } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Role } from "@/types";
 
@@ -33,6 +32,7 @@ interface UserRow {
   role: string;
   title?: string;
   isActive: boolean;
+  deletedAt?: string;
 }
 
 interface Paginated<T> {
@@ -50,6 +50,7 @@ export default function AdminUsersPage() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [scope, setScope] = useState<DeletionScope>("active");
 
   const [form, setForm] = useState({
     name: "",
@@ -61,7 +62,7 @@ export default function AdminUsersPage() {
   });
 
   const { data, isLoading } = useQuery<Paginated<UserRow>>({
-    queryKey: ["/admin/users", { limit: 50 }],
+    queryKey: ["/admin/users", { limit: 50, deletionScope: scope }],
     queryFn,
   });
   const users = data?.users ?? [];
@@ -85,12 +86,7 @@ export default function AdminUsersPage() {
       setMessage("User created.");
       invalidate();
     },
-    onError: (err) =>
-      setError(
-        err instanceof ApiClientError
-          ? err.message || formatApiErrors(err.errors)
-          : "Failed to create user.",
-      ),
+    onError: (err) => setError(apiErrorMessage(err, "Failed to create user.")),
   });
 
   const toggleActive = useMutation({
@@ -99,31 +95,28 @@ export default function AdminUsersPage() {
         ? apiPost(`/admin/users/${id}/deactivate`)
         : apiPatch(`/admin/users/${id}`, { isActive: true }),
     onSuccess: invalidate,
-    onError: (err) =>
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to update user.",
-      ),
+    onError: (err) => setError(apiErrorMessage(err, "Failed to update user.")),
   });
 
   const setRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) =>
       apiPatch(`/admin/users/${id}`, { role }),
     onSuccess: invalidate,
-    onError: (err) =>
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to update role.",
-      ),
+    onError: (err) => setError(apiErrorMessage(err, "Failed to update role.")),
   });
 
   if (isLoading) return <Spinner className="mx-auto h-8 w-8" />;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Users</h1>
-        <Button onClick={() => setOpen((v) => !v)} size="sm">
-          <Plus className="h-4 w-4" /> Add user
-        </Button>
+        <div className="flex items-center gap-2">
+          <DeletionScopeSelect value={scope} onChange={setScope} />
+          <Button onClick={() => setOpen((v) => !v)} size="sm">
+            <Plus className="h-4 w-4" /> Add user
+          </Button>
+        </div>
       </div>
 
       {message && <Alert variant="success">{message}</Alert>}
@@ -249,63 +242,100 @@ export default function AdminUsersPage() {
                     </td>
                   </tr>
                 )}
-                {users.map((u) => (
-                  <tr key={u._id} className="hover:bg-muted/30">
-                    <td className="px-4 py-3 font-medium">{u.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {u.email}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {u.title ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Select
-                        value={u.role}
-                        onChange={(e) =>
-                          setRole.mutate({ id: u._id, role: e.target.value })
-                        }
-                        className="h-8 w-36"
-                      >
-                        {roles
-                          .filter(
-                            (r) =>
-                              r !== Role.SUPER_ADMIN ||
-                              viewer?.role === Role.SUPER_ADMIN,
-                          )
-                          .map((r) => (
-                            <option key={r} value={r}>
-                              {r.replace("_", " ")}
-                            </option>
-                          ))}
-                      </Select>
-                    </td>
-                    <td className="px-4 py-3">
-                      <RoleBadge role={u.role} />
-                      <span
-                        className={`ml-2 text-xs ${u.isActive ? "text-emerald-600" : "text-destructive"}`}
-                      >
-                        {u.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          toggleActive.mutate({
-                            id: u._id,
-                            isActive: u.isActive,
-                          })
-                        }
-                        title={u.isActive ? "Deactivate" : "Activate"}
-                      >
-                        <Power
-                          className={`h-4 w-4 ${u.isActive ? "text-destructive" : "text-emerald-600"}`}
-                        />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const isSelf = u._id === viewer?.id;
+                  return (
+                    <tr
+                      key={u._id}
+                      className={
+                        u.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
+                      }
+                    >
+                      <td className="px-4 py-3 font-medium">
+                        {u.name}
+                        {isSelf && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (you)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {u.email}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {u.title ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Select
+                          value={u.role}
+                          disabled={Boolean(u.deletedAt)}
+                          onChange={(e) =>
+                            setRole.mutate({ id: u._id, role: e.target.value })
+                          }
+                          className="h-8 w-36"
+                        >
+                          {roles
+                            .filter(
+                              (r) =>
+                                r !== Role.SUPER_ADMIN ||
+                                viewer?.role === Role.SUPER_ADMIN,
+                            )
+                            .map((r) => (
+                              <option key={r} value={r}>
+                                {r.replace("_", " ")}
+                              </option>
+                            ))}
+                        </Select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <RoleBadge role={u.role} />
+                        {u.deletedAt ? (
+                          <span className="ml-2 text-xs font-semibold text-destructive">
+                            Deleted
+                          </span>
+                        ) : (
+                          <span
+                            className={`ml-2 text-xs ${u.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
+                          >
+                            {u.isActive ? "Active" : "Inactive"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!u.deletedAt && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                toggleActive.mutate({
+                                  id: u._id,
+                                  isActive: u.isActive,
+                                })
+                              }
+                              title={u.isActive ? "Deactivate" : "Activate"}
+                            >
+                              <Power
+                                className={`h-4 w-4 ${u.isActive ? "text-destructive" : "text-emerald-600"}`}
+                              />
+                            </Button>
+                          )}
+                          <DeleteRowActions
+                            basePath="/admin/users"
+                            id={u._id}
+                            label={isSelf ? "your account" : u.name}
+                            deleted={Boolean(u.deletedAt)}
+                            disabled={isSelf && !u.deletedAt}
+                            disabledReason="You cannot delete your own account"
+                            onDone={invalidate}
+                            onError={setError}
+                            onMessage={setMessage}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

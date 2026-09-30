@@ -5,6 +5,7 @@ import { sendGrievanceSubmittedEmail } from "../email";
 import { Grievance } from "../models/grievance.model";
 import { GrievanceCategory } from "../models/grievance-category.model";
 import { GrievanceUpdate } from "../models/grievance-update.model";
+import { deletionFilter } from "../models/soft-delete";
 import { SubCounty } from "../models/sub-county.model";
 import { User } from "../models/user.model";
 import { Ward } from "../models/ward.model";
@@ -16,24 +17,30 @@ import { createNotifications } from "./notification.service";
 // ─── Lookup Data (Public) ───────────────────────────────────────────────────
 
 export async function getActiveSubCounties() {
-  return SubCounty.find({ isActive: true })
+  return SubCounty.find({ isActive: true, ...deletionFilter() })
     .collation({ locale: "en", strength: 2 })
     .sort({ name: 1 });
 }
 
 export async function getActiveWardsBySubCounty(subCountyId: string) {
-  const subCounty = await SubCounty.findById(subCountyId);
+  const subCounty = await SubCounty.findOne({
+    _id: subCountyId,
+    ...deletionFilter(),
+  });
   if (!subCounty || !subCounty.isActive) {
     throw ApiError.notFound("Sub-County not found");
   }
 
-  return Ward.find({ subCountyId, isActive: true })
+  return Ward.find({ subCountyId, isActive: true, ...deletionFilter() })
     .collation({ locale: "en", strength: 2 })
     .sort({ name: 1 });
 }
 
 export async function getActiveCategories() {
-  return GrievanceCategory.find({ isActive: true }).sort({ name: 1 });
+  return GrievanceCategory.find({
+    isActive: true,
+    ...deletionFilter(),
+  }).sort({ name: 1 });
 }
 
 // ─── Public Stats (for landing page) ────────────────────────────────────────
@@ -45,10 +52,13 @@ export async function getPublicStats() {
     activeCategories,
     activeSubCounties,
   ] = await Promise.all([
-    Grievance.countDocuments(),
-    Grievance.countDocuments({ status: { $in: ["RESOLVED", "CLOSED"] } }),
-    GrievanceCategory.countDocuments({ isActive: true }),
-    SubCounty.countDocuments({ isActive: true }),
+    Grievance.countDocuments(deletionFilter()),
+    Grievance.countDocuments({
+      ...deletionFilter(),
+      status: { $in: ["RESOLVED", "CLOSED"] },
+    }),
+    GrievanceCategory.countDocuments({ isActive: true, ...deletionFilter() }),
+    SubCounty.countDocuments({ isActive: true, ...deletionFilter() }),
   ]);
 
   return {
@@ -67,12 +77,15 @@ export async function submitGrievance(input: {
   categoryId: string;
   description: string;
 }) {
-  const subCounty = await SubCounty.findById(input.subCountyId);
+  const subCounty = await SubCounty.findOne({
+    _id: input.subCountyId,
+    ...deletionFilter(),
+  });
   if (!subCounty || !subCounty.isActive) {
     throw ApiError.badRequest("Invalid Sub-County");
   }
 
-  const ward = await Ward.findById(input.wardId);
+  const ward = await Ward.findOne({ _id: input.wardId, ...deletionFilter() });
   if (!ward || !ward.isActive) {
     throw ApiError.badRequest("Invalid Ward");
   }
@@ -82,7 +95,10 @@ export async function submitGrievance(input: {
     );
   }
 
-  const category = await GrievanceCategory.findById(input.categoryId);
+  const category = await GrievanceCategory.findOne({
+    _id: input.categoryId,
+    ...deletionFilter(),
+  });
   if (!category || !category.isActive) {
     throw ApiError.badRequest("Invalid Category");
   }
@@ -146,6 +162,7 @@ async function notifyAdminsOfSubmission(
   const admins = await User.find({
     role: { $in: [Role.ADMIN, Role.SUPER_ADMIN] },
     isActive: true,
+    ...deletionFilter(),
   })
     .select("email")
     // SUPER_ADMIN sorts above ADMIN descending, so if the cap truncates the
@@ -160,6 +177,7 @@ async function notifyAdminsOfSubmission(
     const total = await User.countDocuments({
       role: { $in: [Role.ADMIN, Role.SUPER_ADMIN] },
       isActive: true,
+      ...deletionFilter(),
     });
     if (total > MAX_NOTIFIED_ADMINS) {
       console.warn(
@@ -191,7 +209,10 @@ async function notifyAdminsOfSubmission(
 // ─── Track Grievance by Reference Code ──────────────────────────────────────
 
 export async function trackByReferenceCode(referenceCode: string) {
-  const grievance = await Grievance.findOne({ referenceCode })
+  const grievance = await Grievance.findOne({
+    referenceCode,
+    ...deletionFilter(),
+  })
     .populate("categoryId", "name description")
     .lean();
 

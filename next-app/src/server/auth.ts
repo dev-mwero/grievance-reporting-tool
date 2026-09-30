@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import type { AuthUser, Role } from "@/types";
+import { type AuthUser, Role } from "@/types";
 import { ApiError } from "./api-error";
 import { connectToDatabase } from "./db";
 import { env } from "./env";
@@ -53,6 +53,31 @@ export async function clearAuthCookies() {
 }
 
 /**
+ * Reject a request from an account that must no longer act.
+ *
+ * A verified JWT alone is not sufficient: without this check a soft-deleted
+ * account would keep every permission it had until its access token expired,
+ * and a permanently purged account would keep working for the remainder of
+ * the token's lifetime. Cost is one indexed projection off the `_id` index.
+ */
+async function assertAccountUsable(userId: string): Promise<void> {
+  await connectToDatabase();
+  const account = await User.findById(userId)
+    .select("isActive deletedAt")
+    .lean();
+
+  if (!account) {
+    throw ApiError.unauthorized("Account no longer exists");
+  }
+  if (account.deletedAt) {
+    throw ApiError.forbidden("This account has been deleted");
+  }
+  if (account.isActive === false) {
+    throw ApiError.forbidden("Account is deactivated");
+  }
+}
+
+/**
  * Returns the access token payload guarded by JWT verification alone. Used by
  * API Route Handlers where a verified, non-expired token is sufficient.
  */
@@ -61,8 +86,11 @@ export async function requireAuth(): Promise<AccessTokenPayload> {
   const token = store.get(ACCESS_COOKIE)?.value;
   if (!token) throw ApiError.unauthorized("Not authenticated");
   try {
-    return verifyAccessToken(token);
-  } catch {
+    const payload = verifyAccessToken(token);
+    await assertAccountUsable(payload.userId);
+    return payload;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
     throw ApiError.unauthorized("Session expired, please sign in again");
   }
 }
@@ -74,6 +102,22 @@ export async function requireRole(
   if (!roles.includes(user.role)) {
     throw ApiError.forbidden(
       "You do not have permission to perform this action",
+    );
+  }
+  return user;
+}
+
+/**
+ * Guard for destructive, irreversible operations — permanently deleting a
+ * record. Restricted to system admins; ordinary admins get the soft delete
+ * path instead. The role is read from the token claim, which means a system
+ * admin previewing a lower role is correctly denied while previewing.
+ */
+export async function requireSuperAdmin(): Promise<AccessTokenPayload> {
+  const user = await requireAuth();
+  if (user.role !== Role.SUPER_ADMIN) {
+    throw ApiError.forbidden(
+      "Only a system admin can permanently delete records",
     );
   }
   return user;
@@ -113,9 +157,9 @@ export async function getSession(): Promise<AuthUser | null> {
   try {
     await connectToDatabase();
     const user = await User.findById(payload.userId)
-      .select("name email role title isActive previewRole")
+      .select("name email role title isActive previewRole deletedAt")
       .lean();
-    if (!user || user.isActive === false) return null;
+    if (!user || user.isActive === false || user.deletedAt) return null;
     return {
       id: String(user._id),
       name: user.name,

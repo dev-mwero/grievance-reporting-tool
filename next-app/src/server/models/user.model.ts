@@ -1,7 +1,12 @@
 import mongoose, { type Document, Schema } from "mongoose";
 import { Role } from "@/types";
+import {
+  type ISoftDeletable,
+  softDeleteFields,
+  softDeleteIndex,
+} from "./soft-delete";
 
-export interface IUser extends Document {
+export interface IUser extends Document, ISoftDeletable {
   name: string;
   email: string;
   phone?: string;
@@ -69,6 +74,7 @@ const userSchema = new Schema<IUser>(
     lastLoginAt: {
       type: Date,
     },
+    ...softDeleteFields,
   },
   {
     timestamps: true,
@@ -82,6 +88,7 @@ const userSchema = new Schema<IUser>(
 );
 
 userSchema.index({ role: 1, isActive: 1 });
+userSchema.index(softDeleteIndex);
 
 export const User =
   (mongoose.models.User as mongoose.Model<IUser>) ||

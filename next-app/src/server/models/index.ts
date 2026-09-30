@@ -23,6 +23,15 @@ export {
   type IPasswordResetToken,
   PasswordResetToken,
 } from "./password-reset-token.model";
+export {
+  type DeletionScope,
+  deletionFilter,
+  type ISoftDeletable,
+  notDeleted,
+  onlyDeleted,
+  softDeleteFields,
+  softDeleteIndex,
+} from "./soft-delete";
 export { type ISubCounty, SubCounty } from "./sub-county.model";
 export { type IUser, User } from "./user.model";
 export { type IWard, Ward } from "./ward.model";

@@ -1,6 +1,11 @@
 import mongoose, { type Document, Schema } from "mongoose";
+import {
+  type ISoftDeletable,
+  softDeleteFields,
+  softDeleteIndex,
+} from "./soft-delete";
 
-export interface IWard extends Document {
+export interface IWard extends Document, ISoftDeletable {
   name: string;
   code: string;
   subCountyId: mongoose.Types.ObjectId;
@@ -32,6 +37,7 @@ const wardSchema = new Schema<IWard>(
       type: Boolean,
       default: true,
     },
+    ...softDeleteFields,
   },
   {
     timestamps: true,
@@ -40,6 +46,7 @@ const wardSchema = new Schema<IWard>(
 
 wardSchema.index({ subCountyId: 1, code: 1 }, { unique: true });
 wardSchema.index({ subCountyId: 1, isActive: 1 });
+wardSchema.index(softDeleteIndex);
 
 export const Ward =
   (mongoose.models.Ward as mongoose.Model<IWard>) ||

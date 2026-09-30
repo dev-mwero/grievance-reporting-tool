@@ -1,10 +1,12 @@
 import { z } from "zod";
+import { deletionScopeSchema } from "./common";
 
 export const listSubCountiesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(1000).default(20),
   search: z.string().max(200).optional(),
   isActive: z.enum(["true", "false"]).optional(),
+  deletionScope: deletionScopeSchema,
 });
 
 export type ListSubCountiesQuery = z.infer<typeof listSubCountiesQuerySchema>;
@@ -30,6 +32,7 @@ export const listWardsQuerySchema = z.object({
   search: z.string().max(200).optional(),
   subCountyId: z.string().optional(),
   isActive: z.enum(["true", "false"]).optional(),
+  deletionScope: deletionScopeSchema,
 });
 
 export type ListWardsQuery = z.infer<typeof listWardsQuerySchema>;
