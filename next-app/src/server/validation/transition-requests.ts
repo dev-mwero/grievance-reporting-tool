@@ -9,6 +9,13 @@ export const proposeTransitionSchema = z.object({
     .trim()
     .min(1, "A reason is required")
     .max(2000, "Reason cannot exceed 2000 characters"),
+  // Keys of files the caller has already uploaded, attached to the complaint as
+  // part of the proposal. The service verifies each against its own record of
+  // who uploaded it, so these are claims to check, not filenames to trust.
+  attachmentKeys: z
+    .array(z.string().min(1).max(512))
+    .max(10, "Cannot attach more than 10 files")
+    .optional(),
 });
 
 export type ProposeTransitionInput = z.infer<typeof proposeTransitionSchema>;

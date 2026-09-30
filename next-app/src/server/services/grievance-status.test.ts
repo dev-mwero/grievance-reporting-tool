@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   workflowFind: vi.fn(),
   workflowFindOne: vi.fn(),
   requestUpdateMany: vi.fn(),
+  attachmentCountDocuments: vi.fn(),
   auditLog: vi.fn(),
   logGrievanceEvent: vi.fn(),
   createNotifications: vi.fn(),
@@ -41,6 +42,11 @@ vi.mock("@/server/models/user.model", () => ({
 // collection is touched on every successful move.
 vi.mock("@/server/models/grievance-transition-request.model", () => ({
   TransitionRequest: { updateMany: h.requestUpdateMany },
+}));
+// updateStatus refuses a move whose edge demands evidence and the complaint has
+// none, so this count is consulted on every move.
+vi.mock("@/server/models/attachment.model", () => ({
+  Attachment: { countDocuments: h.attachmentCountDocuments },
 }));
 vi.mock("@/server/models/workflow.model", () => ({
   Workflow: {
@@ -152,6 +158,7 @@ beforeEach(() => {
   h.logGrievanceEvent.mockResolvedValue(undefined);
   h.createNotifications.mockResolvedValue(undefined);
   h.requestUpdateMany.mockResolvedValue({});
+  h.attachmentCountDocuments.mockResolvedValue(0);
 });
 
 describe("updateStatus is driven by the workflow, not a hardcoded table", () => {
@@ -585,6 +592,95 @@ describe("updateStatus stamps", () => {
         Role.ADMIN,
       ),
     ).rejects.toThrow(/requires a reason/);
+    expect(doc.save).not.toHaveBeenCalled();
+  });
+});
+
+describe("a move that requires evidence is blocked until a file exists", () => {
+  const GATED_WORKFLOW = fakeWorkflow({
+    transitions: [
+      t("SUBMITTED", "IN_PROGRESS", "Start work", ["ADMIN"]),
+      t("IN_PROGRESS", "RESOLVED", "Resolve", ["ADMIN"], false, {
+        requiresAttachment: true,
+      }),
+      t("RESOLVED", "CLOSED", "Close", ["ADMIN"]),
+    ],
+  });
+
+  it("refuses the move when the complaint has no attachments", async () => {
+    h.workflowFindById.mockResolvedValue(GATED_WORKFLOW);
+    h.workflowFindOne.mockResolvedValue(GATED_WORKFLOW);
+    h.attachmentCountDocuments.mockResolvedValue(0);
+    const doc = mockGrievance({ status: "IN_PROGRESS" });
+
+    await expect(
+      updateStatus(
+        GRIEVANCE_ID,
+        { status: "RESOLVED" },
+        USER_ID,
+        "Admin",
+        Role.ADMIN,
+      ),
+    ).rejects.toThrow(/requires at least one attachment as evidence/);
+    expect(doc.save).not.toHaveBeenCalled();
+  });
+
+  it("applies the move once evidence is attached", async () => {
+    h.workflowFindById.mockResolvedValue(GATED_WORKFLOW);
+    h.workflowFindOne.mockResolvedValue(GATED_WORKFLOW);
+    h.attachmentCountDocuments.mockResolvedValue(1);
+    const doc = mockGrievance({ status: "IN_PROGRESS" });
+
+    await updateStatus(
+      GRIEVANCE_ID,
+      { status: "RESOLVED" },
+      USER_ID,
+      "Admin",
+      Role.ADMIN,
+    );
+
+    expect(doc.status).toBe("RESOLVED");
+    expect(doc.save).toHaveBeenCalled();
+  });
+
+  // The flag belongs to the edge, so an unrelated move on the same complaint
+  // must not be dragged into the evidence requirement.
+  it("does not require evidence for a move whose edge does not ask for it", async () => {
+    h.workflowFindById.mockResolvedValue(GATED_WORKFLOW);
+    h.workflowFindOne.mockResolvedValue(GATED_WORKFLOW);
+    h.attachmentCountDocuments.mockResolvedValue(0);
+    const doc = mockGrievance({ status: "RESOLVED" });
+
+    await updateStatus(
+      GRIEVANCE_ID,
+      { status: "CLOSED" },
+      USER_ID,
+      "Admin",
+      Role.ADMIN,
+    );
+
+    expect(doc.status).toBe("CLOSED");
+    // Only the evidence-bearing edge needed checking.
+    expect(h.attachmentCountDocuments).not.toHaveBeenCalled();
+  });
+
+  // Order matters: the evidence test must not be reachable by satisfying the
+  // cheaper gates, and an admin is not exempt from an evidence requirement.
+  it("checks evidence after role and reason, so a rejected move never gets here", async () => {
+    h.workflowFindById.mockResolvedValue(GATED_WORKFLOW);
+    h.workflowFindOne.mockResolvedValue(GATED_WORKFLOW);
+    const doc = mockGrievance({ status: "IN_PROGRESS" });
+
+    await expect(
+      updateStatus(
+        GRIEVANCE_ID,
+        { status: "RESOLVED" },
+        OTHER_USER_ID,
+        "Stranger",
+        Role.STAFF,
+      ),
+    ).rejects.toThrow(/only move complaints assigned to you/);
+    expect(h.attachmentCountDocuments).not.toHaveBeenCalled();
     expect(doc.save).not.toHaveBeenCalled();
   });
 });

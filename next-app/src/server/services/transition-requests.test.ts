@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   requestUpdateMany: vi.fn(),
   userFind: vi.fn(),
   updateStatus: vi.fn(),
+  attachmentCountDocuments: vi.fn(),
+  attachToGrievance: vi.fn(),
   logGrievanceEvent: vi.fn(),
   createNotifications: vi.fn(),
 }));
@@ -38,6 +40,14 @@ vi.mock("@/server/models/workflow.model", () => ({
 }));
 vi.mock("@/server/services/grievances.service", () => ({
   updateStatus: h.updateStatus,
+}));
+// A proposal may arrive with freshly uploaded evidence, which the service claims
+// before queueing the request.
+vi.mock("@/server/services/attachments.service", () => ({
+  attachToGrievance: h.attachToGrievance,
+}));
+vi.mock("@/server/models/attachment.model", () => ({
+  Attachment: { countDocuments: h.attachmentCountDocuments },
 }));
 vi.mock("@/server/services/audit-impl", () => ({
   auditService: { log: vi.fn() },
@@ -142,6 +152,8 @@ beforeEach(() => {
   h.logGrievanceEvent.mockResolvedValue(undefined);
   h.createNotifications.mockResolvedValue(undefined);
   h.updateStatus.mockResolvedValue({});
+  h.attachmentCountDocuments.mockResolvedValue(0);
+  h.attachToGrievance.mockResolvedValue([]);
 });
 
 describe("proposing a move", () => {
@@ -437,5 +449,79 @@ describe("superseding overtaken requests", () => {
     expect(filter._id).toEqual({
       $ne: expect.objectContaining({ toString: expect.any(Function) }),
     });
+  });
+});
+
+describe("a proposal for a move that needs evidence", () => {
+  /** The same workflow, but its gated move also demands a file. */
+  function evidenceWorkflow() {
+    const wf = workflow();
+    return {
+      ...wf,
+      transitions: wf.transitions.map((t) =>
+        t.to === "RESOLVED" ? { ...t, requiresAttachment: true } : t,
+      ),
+    };
+  }
+
+  it("refuses the proposal when nothing is attached", async () => {
+    const wf = evidenceWorkflow();
+    h.workflowFindById.mockResolvedValue(wf);
+    h.workflowFindOne.mockResolvedValue(wf);
+    h.grievanceFindById.mockResolvedValue(grievance());
+    h.attachmentCountDocuments.mockResolvedValue(0);
+
+    await expect(
+      proposeTransition(
+        GRIEVANCE_ID,
+        { to: "RESOLVED", reason: "Verified with the complainant" },
+        STAFF.userId,
+        STAFF.name,
+        STAFF.role,
+      ),
+    ).rejects.toThrow(/requires at least one attachment as evidence/);
+    // The approver must never be handed a request with nothing behind it.
+    expect(h.requestCreate).not.toHaveBeenCalled();
+  });
+
+  // Evidence uploaded moments earlier is still unclaimed in storage; the
+  // proposal claims it, and that satisfies the requirement.
+  it("accepts evidence supplied with the proposal", async () => {
+    const wf = evidenceWorkflow();
+    h.workflowFindById.mockResolvedValue(wf);
+    h.workflowFindOne.mockResolvedValue(wf);
+    h.grievanceFindById.mockResolvedValue(grievance());
+    h.attachmentCountDocuments.mockResolvedValue(1);
+
+    await proposeTransition(
+      GRIEVANCE_ID,
+      { to: "RESOLVED", reason: "Verified with the complainant" },
+      STAFF.userId,
+      STAFF.name,
+      STAFF.role,
+      { attachmentKeys: ["abc/evidence.png"] },
+    );
+
+    expect(h.attachToGrievance).toHaveBeenCalledWith(
+      GRIEVANCE_ID,
+      [{ fileKey: "abc/evidence.png" }],
+      expect.objectContaining({ userId: STAFF_ID }),
+    );
+    expect(h.requestCreate).toHaveBeenCalledOnce();
+  });
+
+  it("does not consult the evidence count for a move that needs none", async () => {
+    h.grievanceFindById.mockResolvedValue(grievance());
+
+    await proposeTransition(
+      GRIEVANCE_ID,
+      { to: "RESOLVED", reason: "Verified with the complainant" },
+      STAFF.userId,
+      STAFF.name,
+      STAFF.role,
+    );
+
+    expect(h.attachmentCountDocuments).not.toHaveBeenCalled();
+    expect(h.attachToGrievance).not.toHaveBeenCalled();
   });
 });

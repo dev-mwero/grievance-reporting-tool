@@ -19,6 +19,10 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRY: z.string().default("7d"),
   APP_URL: z.string().default("http://localhost:3000"),
   CLIENT_URL: z.string().default("http://localhost:3000"),
+  // Read directly by UTApi when constructing it, and required for the upload
+  // route. Declared here so a misconfigured deployment fails at boot with a
+  // clear message rather than at the first upload.
+  UPLOADTHING_TOKEN: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_SECURE: z.enum(["true", "false"]).default("false"),

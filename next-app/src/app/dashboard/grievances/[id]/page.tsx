@@ -1,10 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Calendar, MapPin, MessageSquare, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  MapPin,
+  MessageSquare,
+  Paperclip,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { AttachmentPanel } from "@/components/attachment-panel";
 import { RichTextView } from "@/components/rich-text-view";
 import {
   Alert,
@@ -165,6 +173,26 @@ export default function GrievanceDetailPage() {
 
   const selectedMove = moves.find((m) => m.to === chosenMove);
 
+  /**
+   * Whether any evidence exists, so the panel can hide its dropzone once the
+   * requirement is met. Counted on the server rather than inferred from the
+   * list so the button's enabled state and the panel agree.
+   */
+  const { data: evidence } = useQuery<{ count: number }>({
+    queryKey: ["/grievances", id, "attachment-count"],
+    queryFn: ({ signal }) =>
+      apiGet<{ count: number }>(`/grievances/${id}/attachments/count`, signal),
+    enabled: Boolean(id),
+  });
+  const hasEvidence = (evidence?.count ?? 0) > 0;
+
+  // Keys uploaded in this session that the service has not yet been asked to
+  // attach. Held so a proposal can claim them in the same request; cleared once
+  // they have been, so a later proposal does not try to re-claim them.
+  const [pendingAttachmentKeys, setPendingAttachmentKeys] = useState<string[]>(
+    [],
+  );
+
   const statusMutation = useMutation({
     mutationFn: () =>
       apiPatch(`/grievances/${id}/status`, {
@@ -204,12 +232,24 @@ export default function GrievanceDetailPage() {
       apiPost(`/grievances/${id}/transition-requests`, {
         to: chosenMove,
         reason: statusNote,
+        // Evidence uploaded moments earlier is still unclaimed in storage; the
+        // service verifies each key against its own record of the upload before
+        // attaching it alongside the proposal.
+        ...(pendingAttachmentKeys.length > 0
+          ? { attachmentKeys: pendingAttachmentKeys }
+          : {}),
       }),
     onSuccess: () => {
       setChosenMove("");
       setStatusNote("");
+      setPendingAttachmentKeys([]);
       queryClient.invalidateQueries({
         queryKey: ["/grievances", id, "transition-requests"],
+      });
+      // The count changed server-side, so the evidence gate must re-read it
+      // before the next move can be applied.
+      queryClient.invalidateQueries({
+        queryKey: ["/grievances", id, "attachment-count"],
       });
     },
     onError: (err) =>
@@ -368,6 +408,27 @@ export default function GrievanceDetailPage() {
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Paperclip className="h-5 w-5 text-primary" /> Evidence
+              </CardTitle>
+              <CardDescription>
+                Files supporting this complaint. Moves configured to require
+                evidence cannot be applied until something is attached.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AttachmentPanel
+                grievanceId={id}
+                hasEvidence={hasEvidence}
+                onUploaded={(keys) =>
+                  setPendingAttachmentKeys((prev) => [...prev, ...keys])
+                }
+              />
+            </CardContent>
+          </Card>
+
           {isAdmin && (
             <Card>
               <CardHeader>
@@ -485,11 +546,21 @@ export default function GrievanceDetailPage() {
                   />
                 </div>
 
+                {/* Evidence requirement. Surfaced here rather than left to the
+                    service's error, because the fix is to upload a file — and
+                    the server refuses the move for the same reason. */}
+                {selectedMove?.requiresAttachment === true && !hasEvidence && (
+                  <Alert variant="info">
+                    This action needs evidence attached first. Add a file in
+                    Evidence above, then come back to apply it.
+                  </Alert>
+                )}
+
                 <Button
                   className="w-full"
                   onClick={() => {
                     if (selectedMove?.canApply === false) {
-                      proposeMutation.mutate();
+                      proposeMutation.mutate(undefined);
                     } else {
                       statusMutation.mutate();
                     }
@@ -505,7 +576,10 @@ export default function GrievanceDetailPage() {
                       (selectedMove?.requiresReason === true ||
                         selectedMove?.requiresApproval === true)) ||
                     (pendingRequest !== undefined &&
-                      selectedMove?.canApply === false)
+                      selectedMove?.canApply === false) ||
+                    // Disabled rather than left to fail: the remedy is visible
+                    // in the notice above.
+                    (selectedMove?.requiresAttachment === true && !hasEvidence)
                   }
                 >
                   {proposeMutation.isPending

@@ -38,6 +38,7 @@ export async function POST(
       user.userId,
       await getActorName(user),
       user.role,
+      { attachmentKeys: body.attachmentKeys },
     );
     return created(request, "Move sent for approval");
   });

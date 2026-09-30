@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { stageFor } from "@/lib/stages";
 import { Role } from "@/types";
 import { ApiError } from "../api-error";
+import { Attachment } from "../models/attachment.model";
 import { Grievance } from "../models/grievance.model";
 import {
   type ITransitionRequest,
@@ -9,6 +10,7 @@ import {
 } from "../models/grievance-transition-request.model";
 import { User } from "../models/user.model";
 import { type IWorkflow, Workflow } from "../models/workflow.model";
+import { attachToGrievance } from "./attachments.service";
 import { AuditAction } from "./audit.service";
 import { logGrievanceEvent } from "./audit-impl";
 import { updateStatus } from "./grievances.service";
@@ -38,6 +40,7 @@ export async function proposeTransition(
   userId: string,
   userName: string,
   role: string,
+  opts: { attachmentKeys?: string[] } = {},
 ) {
   if (isAdminRole(role)) {
     // An admin has no reason to route around their own authority.
@@ -93,6 +96,32 @@ export async function proposeTransition(
   const reason = input.reason.trim();
   if (!reason) {
     throw ApiError.badRequest("A reason is required to propose a move");
+  }
+
+  // Evidence is claimed before the request exists so that the move is never
+  // queued without it. Doing it in this order means the approver's queue never
+  // holds a request whose supporting evidence is still in flight.
+  const attachmentKeys = opts.attachmentKeys ?? [];
+  if (attachmentKeys.length > 0) {
+    await attachToGrievance(
+      grievanceId,
+      attachmentKeys.map((fileKey) => ({ fileKey })),
+      { userId, name: userName, role },
+    );
+  }
+
+  // The same rule the direct move enforces: a move configured to need evidence
+  // cannot be requested on a note alone. Checked after the uploads are attached
+  // so evidence supplied with the proposal satisfies it.
+  if (edge.requiresAttachment) {
+    const evidence = await Attachment.countDocuments({
+      grievanceId: grievance._id,
+    });
+    if (evidence === 0) {
+      throw ApiError.badRequest(
+        `"${edge.actionLabel}" requires at least one attachment as evidence`,
+      );
+    }
   }
 
   const existing = await TransitionRequest.findOne({

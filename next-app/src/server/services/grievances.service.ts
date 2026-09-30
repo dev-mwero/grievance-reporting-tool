@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { Role } from "@/types";
 import { ApiError } from "../api-error";
 import { sendGrievanceAssignedEmail } from "../email";
+import { Attachment } from "../models/attachment.model";
 import { Grievance, type IGrievance } from "../models/grievance.model";
 import { GrievanceAssignment } from "../models/grievance-assignment.model";
 import { GrievanceCategory } from "../models/grievance-category.model";
@@ -347,6 +348,22 @@ export async function updateStatus(
   const reason = input.note?.trim();
   if (configured.requiresReason && !reason) {
     throw ApiError.badRequest(`"${configured.actionLabel}" requires a reason`);
+  }
+
+  // A move configured to need evidence cannot proceed on a note alone. Checked
+  // here, at the single point every move passes through, because the flag is a
+  // property of the edge rather than of the UI: an admin applying the move
+  // directly and an approval being granted are both just calls to this
+  // function, so enforcing it anywhere else would leave a way around it.
+  if (configured.requiresAttachment) {
+    const evidence = await Attachment.countDocuments({
+      grievanceId: grievance._id,
+    });
+    if (evidence === 0) {
+      throw ApiError.badRequest(
+        `"${configured.actionLabel}" requires at least one attachment as evidence`,
+      );
+    }
   }
 
   const previousStatus = grievance.status;
