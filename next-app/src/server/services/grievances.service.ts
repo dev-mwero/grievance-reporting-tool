@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { after } from "next/server";
-import { canTransition, type GrievanceStatus } from "@/types";
+import { canTransition, GrievanceStatus } from "@/types";
 import { ApiError } from "../api-error";
 import { sendGrievanceAssignedEmail } from "../email";
 import { Grievance, type IGrievance } from "../models/grievance.model";
@@ -285,6 +285,17 @@ export async function updateStatus(
       break;
   }
 
+  // Each stamp describes how long the case spent in that state, so it is only
+  // meaningful while the case is actually in it. Reopening a resolved or closed
+  // case must clear it, or `getAvgResolutionDays` keeps measuring a case that
+  // is open again.
+  if (input.status !== GrievanceStatus.RESOLVED) {
+    grievance.resolvedAt = undefined;
+  }
+  if (input.status !== GrievanceStatus.CLOSED) {
+    grievance.closedAt = undefined;
+  }
+
   await grievance.save();
 
   await GrievanceUpdate.create({
@@ -390,10 +401,20 @@ export async function assignGrievance(
     (id) => new mongoose.Types.ObjectId(id),
   );
 
-  if (
-    ["SUBMITTED", "ACKNOWLEDGED", "UNDER_REVIEW"].includes(grievance.status)
-  ) {
-    grievance.status = "ASSIGNED" as GrievanceStatus;
+  // Assignment implies the case is now ASSIGNED. The transition table has no
+  // SUBMITTED → ASSIGNED edge, so this is deliberately a widening of the graph
+  // rather than an ordinary transition — hence the explicit status list instead
+  // of canTransition(), which would reject it. The two enforcers must agree, or
+  // the status dropdown and the assign button will disagree about what is
+  // reachable.
+  const autoAssignable: GrievanceStatus[] = [
+    GrievanceStatus.SUBMITTED,
+    GrievanceStatus.ACKNOWLEDGED,
+    GrievanceStatus.UNDER_REVIEW,
+  ];
+  const statusBeforeAssignment = grievance.status;
+  if (autoAssignable.includes(grievance.status)) {
+    grievance.status = GrievanceStatus.ASSIGNED;
   }
 
   await grievance.save();
@@ -418,6 +439,14 @@ export async function assignGrievance(
     {
       primaryAssigneeId: input.primaryAssigneeId,
       supportingAssigneeIds: input.supportingAssigneeIds,
+      // Recorded because assignment can move the case as a side effect; without
+      // this the status change would be invisible in the audit trail.
+      ...(statusBeforeAssignment !== grievance.status
+        ? {
+            statusFrom: statusBeforeAssignment,
+            statusTo: grievance.status,
+          }
+        : {}),
     },
   );
 

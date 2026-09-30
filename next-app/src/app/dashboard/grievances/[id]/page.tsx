@@ -319,43 +319,45 @@ export default function GrievanceDetailPage() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div>
-                <Label htmlFor="update-status">Change status</Label>
-                <Select
-                  id="update-status"
-                  value={newStatus}
-                  onChange={(e) =>
-                    setNewStatus(e.target.value as GrievanceStatus | "")
-                  }
-                >
-                  <option value="">Select status…</option>
-                  {transitions.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace("_", " ")}
-                    </option>
-                  ))}
-                </Select>
-                <Textarea
-                  className="mt-2"
-                  placeholder="Note shown to the complainant (optional)"
-                  value={statusNote}
-                  onChange={(e) => setStatusNote(e.target.value)}
-                />
-                <Button
-                  className="mt-2 w-full"
-                  onClick={() => statusMutation.mutate()}
-                  disabled={!newStatus || statusMutation.isPending}
-                >
-                  {statusMutation.isPending ? "Updating…" : "Update status"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div>
+                  <Label htmlFor="update-status">Change status</Label>
+                  <Select
+                    id="update-status"
+                    value={newStatus}
+                    onChange={(e) =>
+                      setNewStatus(e.target.value as GrievanceStatus | "")
+                    }
+                  >
+                    <option value="">Select status…</option>
+                    {transitions.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace("_", " ")}
+                      </option>
+                    ))}
+                  </Select>
+                  <Textarea
+                    className="mt-2"
+                    placeholder="Note shown to the complainant (optional)"
+                    value={statusNote}
+                    onChange={(e) => setStatusNote(e.target.value)}
+                  />
+                  <Button
+                    className="mt-2 w-full"
+                    onClick={() => statusMutation.mutate()}
+                    disabled={!newStatus || statusMutation.isPending}
+                  >
+                    {statusMutation.isPending ? "Updating…" : "Update status"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
