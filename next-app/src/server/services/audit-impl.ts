@@ -133,3 +133,21 @@ export async function logAuthEvent(
     metadata,
   });
 }
+
+export async function logWorkflowEvent(
+  action: AuditAction,
+  workflowId: string,
+  userId?: string,
+  userName?: string,
+  metadata?: Record<string, unknown>,
+) {
+  await auditService.log({
+    action,
+    entityType: "Workflow",
+    entityId: workflowId,
+    actorId: userId,
+    actorType: userId ? ActorType.USER : ActorType.SYSTEM,
+    actorName: userName,
+    metadata,
+  });
+}

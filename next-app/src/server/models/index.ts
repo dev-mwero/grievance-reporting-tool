@@ -35,3 +35,9 @@ export {
 export { type ISubCounty, SubCounty } from "./sub-county.model";
 export { type IUser, User } from "./user.model";
 export { type IWard, Ward } from "./ward.model";
+export {
+  type IWorkflow,
+  type IWorkflowStage,
+  type IWorkflowTransition,
+  Workflow,
+} from "./workflow.model";
