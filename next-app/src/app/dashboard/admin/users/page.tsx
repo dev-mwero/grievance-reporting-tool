@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power } from "lucide-react";
+import { Pencil, Plus, Power } from "lucide-react";
 import { useState } from "react";
 import {
   DeleteRowActions,
   type DeletionScope,
   DeletionScopeSelect,
 } from "@/components/deletion-controls";
+import { EditDialog } from "@/components/edit-dialog";
 import {
   Alert,
   Button,
@@ -31,6 +32,8 @@ interface UserRow {
   email: string;
   role: string;
   title?: string;
+  department?: string;
+  phone?: string;
   isActive: boolean;
   deletedAt?: string;
 }
@@ -44,11 +47,23 @@ interface Paginated<T> {
 
 const roles = Object.values(Role);
 
+const EMPTY_EDIT = {
+  name: "",
+  phone: "",
+  title: "",
+  department: "",
+  role: Role.STAFF,
+  isActive: true,
+};
+
 export default function AdminUsersPage() {
   const viewer = useAuth().user;
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<UserRow | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT);
   const [error, setError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [scope, setScope] = useState<DeletionScope>("active");
 
@@ -98,12 +113,37 @@ export default function AdminUsersPage() {
     onError: (err) => setError(apiErrorMessage(err, "Failed to update user.")),
   });
 
-  const setRole = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: string }) =>
-      apiPatch(`/admin/users/${id}`, { role }),
-    onSuccess: invalidate,
-    onError: (err) => setError(apiErrorMessage(err, "Failed to update role.")),
+  const update = useMutation({
+    mutationFn: () =>
+      apiPatch(`/admin/users/${editing?._id}`, {
+        name: editForm.name,
+        phone: editForm.phone,
+        title: editForm.title,
+        department: editForm.department,
+        role: editForm.role,
+        isActive: editForm.isActive,
+      }),
+    onSuccess: () => {
+      setEditing(null);
+      setMessage("User updated.");
+      invalidate();
+    },
+    onError: (err) =>
+      setEditError(apiErrorMessage(err, "Failed to save user.")),
   });
+
+  const openEdit = (row: UserRow) => {
+    setEditError(null);
+    setEditForm({
+      name: row.name,
+      phone: row.phone ?? "",
+      title: row.title ?? "",
+      department: row.department ?? "",
+      role: row.role as Role,
+      isActive: row.isActive,
+    });
+    setEditing(row);
+  };
 
   if (isLoading) return <Spinner className="mx-auto h-8 w-8" />;
 
@@ -266,36 +306,16 @@ export default function AdminUsersPage() {
                         {u.title ?? "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <Select
-                          value={u.role}
-                          disabled={Boolean(u.deletedAt)}
-                          onChange={(e) =>
-                            setRole.mutate({ id: u._id, role: e.target.value })
-                          }
-                          className="h-8 w-36"
-                        >
-                          {roles
-                            .filter(
-                              (r) =>
-                                r !== Role.SUPER_ADMIN ||
-                                viewer?.role === Role.SUPER_ADMIN,
-                            )
-                            .map((r) => (
-                              <option key={r} value={r}>
-                                {r.replace("_", " ")}
-                              </option>
-                            ))}
-                        </Select>
+                        <RoleBadge role={u.role} />
                       </td>
                       <td className="px-4 py-3">
-                        <RoleBadge role={u.role} />
                         {u.deletedAt ? (
-                          <span className="ml-2 text-xs font-semibold text-destructive">
+                          <span className="text-xs font-semibold text-destructive">
                             Deleted
                           </span>
                         ) : (
                           <span
-                            className={`ml-2 text-xs ${u.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
+                            className={`text-xs ${u.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
                           >
                             {u.isActive ? "Active" : "Inactive"}
                           </span>
@@ -304,21 +324,31 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
                           {!u.deletedAt && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                toggleActive.mutate({
-                                  id: u._id,
-                                  isActive: u.isActive,
-                                })
-                              }
-                              title={u.isActive ? "Deactivate" : "Activate"}
-                            >
-                              <Power
-                                className={`h-4 w-4 ${u.isActive ? "text-destructive" : "text-emerald-600"}`}
-                              />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEdit(u)}
+                                title={`Edit ${u.name}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  toggleActive.mutate({
+                                    id: u._id,
+                                    isActive: u.isActive,
+                                  })
+                                }
+                                title={u.isActive ? "Deactivate" : "Activate"}
+                              >
+                                <Power
+                                  className={`h-4 w-4 ${u.isActive ? "text-destructive" : "text-emerald-600"}`}
+                                />
+                              </Button>
+                            </>
                           )}
                           <DeleteRowActions
                             basePath="/admin/users"
@@ -341,6 +371,110 @@ export default function AdminUsersPage() {
           </div>
         </CardContent>
       </Card>
+
+      <EditDialog
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title="Edit user"
+        description={editing?.name}
+        onSubmit={() => update.mutate()}
+        saving={update.isPending}
+        error={editError}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="edit-user-name">Full name *</Label>
+            <Input
+              id="edit-user-name"
+              value={editForm.name}
+              onChange={(e) =>
+                setEditForm({ ...editForm, name: e.target.value })
+              }
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-user-email">Email</Label>
+            <Input id="edit-user-email" value={editing?.email ?? ""} disabled />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Changing an email address requires sending a new invitation.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="edit-user-phone">Phone</Label>
+            <Input
+              id="edit-user-phone"
+              value={editForm.phone}
+              onChange={(e) =>
+                setEditForm({ ...editForm, phone: e.target.value })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-user-title">Title</Label>
+            <Input
+              id="edit-user-title"
+              value={editForm.title}
+              onChange={(e) =>
+                setEditForm({ ...editForm, title: e.target.value })
+              }
+              placeholder="e.g. Ward Admin"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-user-department">Department</Label>
+            <Input
+              id="edit-user-department"
+              value={editForm.department}
+              onChange={(e) =>
+                setEditForm({ ...editForm, department: e.target.value })
+              }
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-user-role">Role</Label>
+            <Select
+              id="edit-user-role"
+              value={editForm.role}
+              onChange={(e) =>
+                setEditForm({ ...editForm, role: e.target.value as Role })
+              }
+            >
+              {roles
+                .filter(
+                  (r) =>
+                    r !== Role.SUPER_ADMIN || viewer?.role === Role.SUPER_ADMIN,
+                )
+                .map((r) => (
+                  <option key={r} value={r}>
+                    {r.replace("_", " ")}
+                  </option>
+                ))}
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              A role change takes effect on the user&apos;s next request.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="edit-user-status">Status</Label>
+            <Select
+              id="edit-user-status"
+              value={editForm.isActive ? "true" : "false"}
+              onChange={(e) =>
+                setEditForm({
+                  ...editForm,
+                  isActive: e.target.value === "true",
+                })
+              }
+            >
+              <option value="true">Active — can sign in and be assigned</option>
+              <option value="false">
+                Inactive — sign-in blocked, history preserved
+              </option>
+            </Select>
+          </div>
+        </div>
+      </EditDialog>
     </div>
   );
 }

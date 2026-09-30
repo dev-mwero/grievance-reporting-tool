@@ -8,6 +8,7 @@ import {
   type DeletionScope,
   DeletionScopeSelect,
 } from "@/components/deletion-controls";
+import { EditDialog } from "@/components/edit-dialog";
 import {
   Alert,
   Button,
@@ -17,6 +18,7 @@ import {
   CardTitle,
   Input,
   Label,
+  Select,
   Spinner,
   Textarea,
 } from "@/components/ui";
@@ -33,15 +35,19 @@ interface CategoryRow {
   createdAt: string;
 }
 
+const EMPTY_FORM = { name: "", description: "", isActive: true };
+
 export default function AdminCategoriesPage() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<CategoryRow | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [scope, setScope] = useState<DeletionScope>("active");
 
   const [form, setForm] = useState({ name: "", description: "" });
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
 
   const { data, isLoading } = useQuery<{ categories: CategoryRow[] }>({
     queryKey: ["/admin/categories", { limit: 100, deletionScope: scope }],
@@ -67,21 +73,29 @@ export default function AdminCategoriesPage() {
   });
 
   const update = useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: { name: string; description: string };
-    }) => apiPatch(`/admin/categories/${id}`, body),
+    mutationFn: () =>
+      apiPatch(`/admin/categories/${editing?._id}`, {
+        name: editForm.name,
+        description: editForm.description,
+        isActive: editForm.isActive,
+      }),
     onSuccess: () => {
-      setEditId(null);
-      setForm({ name: "", description: "" });
+      setEditing(null);
       setMessage("Category updated.");
       invalidate();
     },
-    onError: showErr,
+    onError: (err) => setEditError(apiErrorMessage(err)),
   });
+
+  const openEdit = (row: CategoryRow) => {
+    setEditError(null);
+    setEditForm({
+      name: row.name,
+      description: row.description ?? "",
+      isActive: row.isActive,
+    });
+    setEditing(row);
+  };
 
   const toggleActive = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -94,7 +108,7 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Categories</h1>
         <div className="flex items-center gap-2">
           <DeletionScopeSelect value={scope} onChange={setScope} />
@@ -188,36 +202,7 @@ export default function AdminCategoriesPage() {
                         c.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
                       }
                     >
-                      <td className="px-4 py-3 font-medium">
-                        {editId === c._id ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={form.name}
-                              onChange={(e) =>
-                                setForm({ ...form, name: e.target.value })
-                              }
-                              className="w-44"
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                update.mutate({ id: c._id, body: form })
-                              }
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditId(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        ) : (
-                          c.name
-                        )}
-                      </td>
+                      <td className="px-4 py-3 font-medium">{c.name}</td>
                       <td className="max-w-xs truncate px-4 py-3 text-muted-foreground">
                         {c.description ?? "—"}
                       </td>
@@ -252,13 +237,7 @@ export default function AdminCategoriesPage() {
                                 variant="ghost"
                                 size="sm"
                                 title={`Edit ${c.name}`}
-                                onClick={() => {
-                                  setEditId(c._id);
-                                  setForm({
-                                    name: c.name,
-                                    description: c.description ?? "",
-                                  });
-                                }}
+                                onClick={() => openEdit(c)}
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
@@ -302,6 +281,50 @@ export default function AdminCategoriesPage() {
           </CardContent>
         </Card>
       )}
+
+      <EditDialog
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title="Edit category"
+        description={editing?.name}
+        onSubmit={() => update.mutate()}
+        saving={update.isPending}
+        error={editError}
+      >
+        <div>
+          <Label htmlFor="edit-category-name">Name *</Label>
+          <Input
+            id="edit-category-name"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-category-description">Description</Label>
+          <Textarea
+            id="edit-category-description"
+            rows={4}
+            value={editForm.description}
+            onChange={(e) =>
+              setEditForm({ ...editForm, description: e.target.value })
+            }
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-category-status">Status</Label>
+          <Select
+            id="edit-category-status"
+            value={editForm.isActive ? "true" : "false"}
+            onChange={(e) =>
+              setEditForm({ ...editForm, isActive: e.target.value === "true" })
+            }
+          >
+            <option value="true">Active — offered for new complaints</option>
+            <option value="false">Inactive — hidden, keeps its history</option>
+          </Select>
+        </div>
+      </EditDialog>
     </div>
   );
 }

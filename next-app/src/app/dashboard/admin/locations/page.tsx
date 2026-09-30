@@ -8,6 +8,7 @@ import {
   type DeletionScope,
   DeletionScopeSelect,
 } from "@/components/deletion-controls";
+import { EditDialog } from "@/components/edit-dialog";
 import {
   Alert,
   Button,
@@ -87,10 +88,14 @@ function SubCountiesPanel({
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<SubCountyRow | null>(null);
   const [scope, setScope] = useState<DeletionScope>("active");
   const [form, setForm] = useState({ name: "", code: "" });
-  const [editForm, setEditForm] = useState({ name: "", code: "" });
+  const [editForm, setEditForm] = useState({
+    name: "",
+    code: "",
+    isActive: true,
+  });
 
   const { data, isLoading } = useQuery<{ subCounties: SubCountyRow[] }>({
     queryKey: ["/admin/sub-counties", { limit: 200, deletionScope: scope }],
@@ -114,15 +119,19 @@ function SubCountiesPanel({
   });
 
   const update = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: typeof editForm }) =>
-      apiPatch(`/admin/sub-counties/${id}`, body),
+    mutationFn: () => apiPatch(`/admin/sub-counties/${editing?._id}`, editForm),
     onSuccess: () => {
-      setEditId(null);
-      setEditForm({ name: "", code: "" });
+      setEditing(null);
+      onMessage("Sub-county updated.");
       invalidate();
     },
     onError: showErr,
   });
+
+  const openEdit = (row: SubCountyRow) => {
+    setEditForm({ name: row.name, code: row.code, isActive: row.isActive });
+    setEditing(row);
+  };
 
   const toggle = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -204,31 +213,9 @@ function SubCountiesPanel({
                         s.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
                       }
                     >
-                      <td className="px-4 py-3 font-medium">
-                        {editId === s._id ? (
-                          <Input
-                            value={editForm.name}
-                            onChange={(e) =>
-                              setEditForm({ ...editForm, name: e.target.value })
-                            }
-                            className="w-44"
-                          />
-                        ) : (
-                          s.name
-                        )}
-                      </td>
+                      <td className="px-4 py-3 font-medium">{s.name}</td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {editId === s._id ? (
-                          <Input
-                            value={editForm.code}
-                            onChange={(e) =>
-                              setEditForm({ ...editForm, code: e.target.value })
-                            }
-                            className="w-24"
-                          />
-                        ) : (
-                          s.code
-                        )}
+                        {s.code}
                       </td>
                       <td className="px-4 py-3">
                         {s.deletedAt ? (
@@ -243,73 +230,49 @@ function SubCountiesPanel({
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {editId === s._id ? (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                update.mutate({ id: s._id, body: editForm })
-                              }
-                              disabled={update.isPending}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditId(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {!s.deletedAt && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  title={`Edit ${s.name}`}
-                                  onClick={() => {
-                                    setEditId(s._id);
-                                    setEditForm({ name: s.name, code: s.code });
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  title={
-                                    s.isActive
-                                      ? `Deactivate ${s.name}`
-                                      : `Activate ${s.name}`
-                                  }
-                                  onClick={() =>
-                                    toggle.mutate({
-                                      id: s._id,
-                                      isActive: s.isActive,
-                                    })
-                                  }
-                                >
-                                  <Power
-                                    className={`h-4 w-4 ${s.isActive ? "text-destructive" : "text-emerald-600"}`}
-                                  />
-                                </Button>
-                              </>
-                            )}
-                            <DeleteRowActions
-                              basePath="/admin/sub-counties"
-                              id={s._id}
-                              label={s.name}
-                              deleted={Boolean(s.deletedAt)}
-                              onDone={invalidate}
-                              onError={showErr}
-                              onMessage={onMessage}
-                            />
-                          </>
-                        )}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!s.deletedAt && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={`Edit ${s.name}`}
+                                onClick={() => openEdit(s)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={
+                                  s.isActive
+                                    ? `Deactivate ${s.name}`
+                                    : `Activate ${s.name}`
+                                }
+                                onClick={() =>
+                                  toggle.mutate({
+                                    id: s._id,
+                                    isActive: s.isActive,
+                                  })
+                                }
+                              >
+                                <Power
+                                  className={`h-4 w-4 ${s.isActive ? "text-destructive" : "text-emerald-600"}`}
+                                />
+                              </Button>
+                            </>
+                          )}
+                          <DeleteRowActions
+                            basePath="/admin/sub-counties"
+                            id={s._id}
+                            label={s.name}
+                            deleted={Boolean(s.deletedAt)}
+                            onDone={invalidate}
+                            onError={showErr}
+                            onMessage={onMessage}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -329,6 +292,50 @@ function SubCountiesPanel({
           </CardContent>
         </Card>
       )}
+
+      <EditDialog
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title="Edit sub-county"
+        description={editing?.name}
+        onSubmit={() => update.mutate()}
+        saving={update.isPending}
+      >
+        <div>
+          <Label htmlFor="edit-subcounty-name">Name *</Label>
+          <Input
+            id="edit-subcounty-name"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-subcounty-code">Code *</Label>
+          <Input
+            id="edit-subcounty-code"
+            value={editForm.code}
+            onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+            required
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Codes must be unique across the county.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="edit-subcounty-status">Status</Label>
+          <Select
+            id="edit-subcounty-status"
+            value={editForm.isActive ? "true" : "false"}
+            onChange={(e) =>
+              setEditForm({ ...editForm, isActive: e.target.value === "true" })
+            }
+          >
+            <option value="true">Active — selectable on new complaints</option>
+            <option value="false">Inactive — hidden, keeps its wards</option>
+          </Select>
+        </div>
+      </EditDialog>
     </div>
   );
 }
@@ -345,13 +352,14 @@ function WardsPanel({
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [subCountyId, setSubCountyId] = useState("");
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<WardRow | null>(null);
   const [scope, setScope] = useState<DeletionScope>("active");
   const [form, setForm] = useState({ name: "", code: "", subCountyId: "" });
   const [editForm, setEditForm] = useState({
     name: "",
     code: "",
     subCountyId: "",
+    isActive: true,
   });
 
   // The parent picker only ever lists live sub-counties: a ward cannot be moved
@@ -400,15 +408,24 @@ function WardsPanel({
   });
 
   const update = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: typeof editForm }) =>
-      apiPatch(`/admin/wards/${id}`, body),
+    mutationFn: () => apiPatch(`/admin/wards/${editing?._id}`, editForm),
     onSuccess: () => {
-      setEditId(null);
-      setEditForm({ name: "", code: "", subCountyId: "" });
+      setEditing(null);
+      onMessage("Ward updated.");
       invalidate();
     },
     onError: showErr,
   });
+
+  const openEdit = (row: WardRow) => {
+    setEditForm({
+      name: row.name,
+      code: row.code,
+      subCountyId: row.subCountyId?._id ?? "",
+      isActive: row.isActive,
+    });
+    setEditing(row);
+  };
 
   const options = subCounties.data?.subCounties ?? [];
 
@@ -515,54 +532,12 @@ function WardsPanel({
                         w.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
                       }
                     >
-                      <td className="px-4 py-3 font-medium">
-                        {editId === w._id ? (
-                          <Input
-                            value={editForm.name}
-                            onChange={(e) =>
-                              setEditForm({ ...editForm, name: e.target.value })
-                            }
-                            className="w-44"
-                          />
-                        ) : (
-                          w.name
-                        )}
-                      </td>
+                      <td className="px-4 py-3 font-medium">{w.name}</td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                        {editId === w._id ? (
-                          <Input
-                            value={editForm.code}
-                            onChange={(e) =>
-                              setEditForm({ ...editForm, code: e.target.value })
-                            }
-                            className="w-24"
-                          />
-                        ) : (
-                          w.code
-                        )}
+                        {w.code}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {editId === w._id ? (
-                          <Select
-                            value={editForm.subCountyId}
-                            onChange={(e) =>
-                              setEditForm({
-                                ...editForm,
-                                subCountyId: e.target.value,
-                              })
-                            }
-                            className="w-48"
-                          >
-                            <option value="">Select…</option>
-                            {options.map((s) => (
-                              <option key={s._id} value={s._id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </Select>
-                        ) : (
-                          (w.subCountyId?.name ?? "—")
-                        )}
+                        {w.subCountyId?.name ?? "—"}
                       </td>
                       <td className="px-4 py-3">
                         {w.deletedAt ? (
@@ -577,77 +552,49 @@ function WardsPanel({
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        {editId === w._id ? (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                update.mutate({ id: w._id, body: editForm })
-                              }
-                              disabled={update.isPending}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditId(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {!w.deletedAt && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  title={`Edit ${w.name}`}
-                                  onClick={() => {
-                                    setEditId(w._id);
-                                    setEditForm({
-                                      name: w.name,
-                                      code: w.code,
-                                      subCountyId: w.subCountyId?._id ?? "",
-                                    });
-                                  }}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  title={
-                                    w.isActive
-                                      ? `Deactivate ${w.name}`
-                                      : `Activate ${w.name}`
-                                  }
-                                  onClick={() =>
-                                    toggle.mutate({
-                                      id: w._id,
-                                      isActive: w.isActive,
-                                    })
-                                  }
-                                >
-                                  <Power
-                                    className={`h-4 w-4 ${w.isActive ? "text-destructive" : "text-emerald-600"}`}
-                                  />
-                                </Button>
-                              </>
-                            )}
-                            <DeleteRowActions
-                              basePath="/admin/wards"
-                              id={w._id}
-                              label={w.name}
-                              deleted={Boolean(w.deletedAt)}
-                              onDone={invalidate}
-                              onError={showErr}
-                              onMessage={onMessage}
-                            />
-                          </>
-                        )}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!w.deletedAt && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={`Edit ${w.name}`}
+                                onClick={() => openEdit(w)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={
+                                  w.isActive
+                                    ? `Deactivate ${w.name}`
+                                    : `Activate ${w.name}`
+                                }
+                                onClick={() =>
+                                  toggle.mutate({
+                                    id: w._id,
+                                    isActive: w.isActive,
+                                  })
+                                }
+                              >
+                                <Power
+                                  className={`h-4 w-4 ${w.isActive ? "text-destructive" : "text-emerald-600"}`}
+                                />
+                              </Button>
+                            </>
+                          )}
+                          <DeleteRowActions
+                            basePath="/admin/wards"
+                            id={w._id}
+                            label={w.name}
+                            deleted={Boolean(w.deletedAt)}
+                            onDone={invalidate}
+                            onError={showErr}
+                            onMessage={onMessage}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -667,6 +614,70 @@ function WardsPanel({
           </CardContent>
         </Card>
       )}
+
+      <EditDialog
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        title="Edit ward"
+        description={editing ? `${editing.name} (${editing.code})` : undefined}
+        onSubmit={() => update.mutate()}
+        saving={update.isPending}
+      >
+        <div>
+          <Label htmlFor="edit-ward-name">Name *</Label>
+          <Input
+            id="edit-ward-name"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-ward-code">Code *</Label>
+          <Input
+            id="edit-ward-code"
+            value={editForm.code}
+            onChange={(e) => setEditForm({ ...editForm, code: e.target.value })}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="edit-ward-subcounty">Sub-county *</Label>
+          <Select
+            id="edit-ward-subcounty"
+            value={editForm.subCountyId}
+            onChange={(e) =>
+              setEditForm({ ...editForm, subCountyId: e.target.value })
+            }
+            required
+          >
+            <option value="">Select…</option>
+            {options.map((s) => (
+              <option key={s._id} value={s._id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Moving a ward re-files the complaints already filed under it.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="edit-ward-status">Status</Label>
+          <Select
+            id="edit-ward-status"
+            value={editForm.isActive ? "true" : "false"}
+            onChange={(e) =>
+              setEditForm({ ...editForm, isActive: e.target.value === "true" })
+            }
+          >
+            <option value="true">Active — selectable on new complaints</option>
+            <option value="false">
+              Inactive — hidden from the public form
+            </option>
+          </Select>
+        </div>
+      </EditDialog>
     </div>
   );
 }

@@ -1,14 +1,15 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, Pencil, Search, X } from "lucide-react";
+import { Eye, Pencil, Search } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import {
   DeleteRowActions,
   type DeletionScope,
   DeletionScopeSelect,
 } from "@/components/deletion-controls";
+import { EditDialog } from "@/components/edit-dialog";
 import {
   Alert,
   Button,
@@ -72,7 +73,7 @@ export default function AdminGrievancesPage() {
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [amendId, setAmendId] = useState<string | null>(null);
+  const [amending, setAmending] = useState<GrievanceRow | null>(null);
 
   const { data, isLoading } = useQuery<ListResponse>({
     queryKey: [
@@ -187,98 +188,79 @@ export default function AdminGrievancesPage() {
                     </tr>
                   )}
                   {grievances.map((g) => (
-                    <Fragment key={g._id}>
-                      <tr
-                        className={
-                          g.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
-                        }
-                      >
-                        <td className="px-4 py-3 font-mono text-xs font-semibold tracking-wide text-primary">
-                          {g.referenceCode}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {g.wardId?.name ?? "—"}
-                          <span className="block text-xs">
-                            {g.subCountyId?.name ?? "—"}
+                    <tr
+                      key={g._id}
+                      className={
+                        g.deletedAt ? "bg-destructive/5" : "hover:bg-muted/30"
+                      }
+                    >
+                      <td className="px-4 py-3 font-mono text-xs font-semibold tracking-wide text-primary">
+                        {g.referenceCode}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {g.wardId?.name ?? "—"}
+                        <span className="block text-xs">
+                          {g.subCountyId?.name ?? "—"}
+                        </span>
+                      </td>
+                      <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                        {g.categoryId?.name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {g.deletedAt ? (
+                          <span
+                            className="text-xs font-semibold text-destructive"
+                            title={g.deleteReason}
+                          >
+                            Deleted
                           </span>
-                        </td>
-                        <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                          {g.categoryId?.name ?? "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          {g.deletedAt ? (
-                            <span
-                              className="text-xs font-semibold text-destructive"
-                              title={g.deleteReason}
-                            >
-                              Deleted
-                            </span>
-                          ) : (
-                            <StatusBadge status={g.status as GrievanceStatus} />
-                          )}
-                        </td>
-                        <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
-                          {g.primaryAssigneeId?.name ?? (
-                            <span className="italic">Unassigned</span>
-                          )}
-                        </td>
-                        <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
-                          {formatDate(g.submittedAt ?? g.createdAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            {!g.deletedAt && (
-                              <>
-                                <Link href={`/dashboard/grievances/${g._id}`}>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    title="Open the full case file"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </Link>
+                        ) : (
+                          <StatusBadge status={g.status as GrievanceStatus} />
+                        )}
+                      </td>
+                      <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                        {g.primaryAssigneeId?.name ?? (
+                          <span className="italic">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
+                        {formatDate(g.submittedAt ?? g.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!g.deletedAt && (
+                            <>
+                              <Link href={`/dashboard/grievances/${g._id}`}>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  title={`Amend ${g.referenceCode}`}
-                                  onClick={() =>
-                                    setAmendId(amendId === g._id ? null : g._id)
-                                  }
+                                  title="Open the full case file"
                                 >
-                                  <Pencil className="h-4 w-4" />
+                                  <Eye className="h-4 w-4" />
                                 </Button>
-                              </>
-                            )}
-                            <DeleteRowActions
-                              basePath="/admin/grievances"
-                              id={g._id}
-                              label={g.referenceCode}
-                              deleted={Boolean(g.deletedAt)}
-                              onDone={invalidate}
-                              onError={showErr}
-                              onMessage={setMessage}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                      {amendId === g._id && (
-                        <tr>
-                          <td colSpan={7} className="bg-muted/40 p-0">
-                            <AmendForm
-                              grievance={g}
-                              onCancel={() => setAmendId(null)}
-                              onSaved={() => {
-                                setAmendId(null);
-                                setMessage(`${g.referenceCode} amended.`);
-                                invalidate();
-                              }}
-                              onError={showErr}
-                            />
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                              </Link>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title={`Amend ${g.referenceCode}`}
+                                onClick={() => setAmending(g)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          <DeleteRowActions
+                            basePath="/admin/grievances"
+                            id={g._id}
+                            label={g.referenceCode}
+                            deleted={Boolean(g.deletedAt)}
+                            onDone={invalidate}
+                            onError={showErr}
+                            onMessage={setMessage}
+                          />
+                        </div>
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -313,26 +295,48 @@ export default function AdminGrievancesPage() {
           </CardContent>
         </Card>
       )}
+
+      <AmendDialog
+        key={amending?._id ?? "closed"}
+        grievance={amending}
+        onClose={() => setAmending(null)}
+        onSaved={(code) => {
+          setAmending(null);
+          setMessage(`${code} amended.`);
+          invalidate();
+        }}
+        onError={showErr}
+      />
     </div>
   );
 }
 
 /**
  * Corrects a misfiled complaint. The public submission endpoint stays
- * immutable, so this is the only way to re-point a case at the right
- * category or location once it has been received.
+ * immutable, so this is the only way to re-point a case at the right category
+ * or location once it has been received.
  */
-function AmendForm({
+function AmendDialog({
   grievance,
-  onCancel,
+  onClose,
   onSaved,
   onError,
 }: {
-  grievance: GrievanceRow;
-  onCancel: () => void;
-  onSaved: () => void;
+  grievance: GrievanceRow | null;
+  onClose: () => void;
+  onSaved: (referenceCode: string) => void;
   onError: (message: string) => void;
 }) {
+  // Seeded from props on mount; the parent keys this component by id so
+  // opening a different complaint remounts it with fresh values.
+  const [form, setForm] = useState({
+    subCountyId: grievance?.subCountyId?._id ?? "",
+    wardId: grievance?.wardId?._id ?? "",
+    categoryId: grievance?.categoryId?._id ?? "",
+    description: grievance?.description ?? "",
+  });
+  const [loadError] = useState<string | null>(null);
+
   const subCounties = useQuery<{ subCounties: SubCountyOption[] }>({
     queryKey: ["/admin/sub-counties", { limit: 200, isActive: "true" }],
     queryFn,
@@ -346,22 +350,17 @@ function AmendForm({
     queryFn,
   });
 
-  const [form, setForm] = useState({
-    subCountyId: grievance.subCountyId?._id ?? "",
-    wardId: grievance.wardId?._id ?? "",
-    categoryId: grievance.categoryId?._id ?? "",
-    description: grievance.description ?? "",
-  });
-
   const save = useMutation({
     mutationFn: () =>
-      apiPatch(`/admin/grievances/${grievance._id}`, {
+      apiPatch(`/admin/grievances/${grievance?._id}`, {
         subCountyId: form.subCountyId,
         wardId: form.wardId,
         categoryId: form.categoryId,
         description: form.description,
       }),
-    onSuccess: onSaved,
+    onSuccess: () => {
+      if (grievance) onSaved(grievance.referenceCode);
+    },
     onError,
   });
 
@@ -371,12 +370,33 @@ function AmendForm({
     (w) => w.subCountyId?._id === form.subCountyId,
   );
 
+  const busy = save.isPending;
+
   return (
-    <div className="space-y-4 p-4">
-      <div className="grid gap-4 md:grid-cols-3">
+    <EditDialog
+      open={Boolean(grievance)}
+      onClose={onClose}
+      size="lg"
+      title="Amend complaint"
+      description={
+        grievance
+          ? `${grievance.referenceCode} · ${grievance.status.replace("_", " ").toLowerCase()}`
+          : undefined
+      }
+      submitLabel="Save amendment"
+      saving={busy}
+      error={loadError}
+      onSubmit={() => save.mutate()}
+    >
+      <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+        Changes are recorded in the audit log with your name. The original
+        submission stays on the record.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-3">
         <div>
-          <Label>Sub-County</Label>
+          <Label htmlFor="amend-subcounty">Sub-County</Label>
           <Select
+            id="amend-subcounty"
             value={form.subCountyId}
             onChange={(e) =>
               setForm({ ...form, subCountyId: e.target.value, wardId: "" })
@@ -390,8 +410,9 @@ function AmendForm({
           </Select>
         </div>
         <div>
-          <Label>Ward</Label>
+          <Label htmlFor="amend-ward">Ward</Label>
           <Select
+            id="amend-ward"
             value={form.wardId}
             onChange={(e) => setForm({ ...form, wardId: e.target.value })}
           >
@@ -404,8 +425,9 @@ function AmendForm({
           </Select>
         </div>
         <div>
-          <Label>Category</Label>
+          <Label htmlFor="amend-category">Category</Label>
           <Select
+            id="amend-category"
             value={form.categoryId}
             onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
           >
@@ -418,31 +440,14 @@ function AmendForm({
         </div>
       </div>
       <div>
-        <Label>Description</Label>
+        <Label htmlFor="amend-description">Description</Label>
         <Textarea
+          id="amend-description"
+          rows={8}
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
-          rows={5}
         />
       </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          disabled={save.isPending}
-          onClick={() => save.mutate()}
-        >
-          {save.isPending ? "Saving…" : "Save amendment"}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={save.isPending}
-          onClick={onCancel}
-        >
-          <X className="h-4 w-4" />
-          Cancel
-        </Button>
-      </div>
-    </div>
+    </EditDialog>
   );
 }
